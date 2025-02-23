@@ -1,0 +1,30 @@
+[project]
+name = "logprise"
+version = "1.0.0"
+description = "A package integrating loguru and apprise for logging and notifications"
+authors = [
+    {name = "Steven Van Ingelgem",email = "steven@vaningelgem.be"}
+]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "loguru",
+    "apprise"
+]
+
+[tool.poetry]
+
+[tool.poetry.group.dev.dependencies]
+pytest-cov = "*"
+pytest-mock = "*"
+ruff = "*"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 120
+python-version = "py310"
+fix = true
