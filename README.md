@@ -41,7 +41,7 @@ logger.error("This will trigger a notification")  # Default is ERROR level
 
 ### Notification Services
 
-Logprise uses Apprise for notifications, which supports a wide range of notification services. Create an `apprise.txt` file in one of the default configuration paths:
+Logprise uses Apprise for notifications, which supports a wide range of notification services. Create an `.apprise` file in one of the default configuration paths:
 
 - `~/.apprise`
 - `~/.config/apprise`
