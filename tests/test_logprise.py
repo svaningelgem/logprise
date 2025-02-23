@@ -22,8 +22,8 @@ def test_intercept_handler_forwards_to_loguru():
 
     # Verify the message was captured by our appriser
     assert len(appriser.buffer) == 1
-    assert appriser.buffer[0]["message"] == test_message
-    assert appriser.buffer[0]["level"].name == "ERROR"
+    assert appriser.buffer[0].record["message"] == test_message
+    assert appriser.buffer[0].record["level"].name == "ERROR"
 
 
 def test_appriser_notification_levels():
@@ -40,7 +40,7 @@ def test_appriser_notification_levels():
     logger.info("Test info")
 
     assert len(appriser.buffer) == 3
-    assert all(record["level"].no >= logger.level("WARNING").no for record in appriser.buffer)
+    assert all(message.record["level"].no >= logger.level("WARNING").no for message in appriser.buffer)
 
 
 def test_send_notification(notify_mock):
@@ -58,8 +58,8 @@ def test_send_notification(notify_mock):
     assert len(notify_mock) == 1
     notification = notify_mock[0]
     assert notification["title"] == "Script Notifications"
-    assert "ERROR: Database connection failed" in notification["body"]
-    assert "CRITICAL: System shutdown initiated" in notification["body"]
+    assert " | ERROR    | test_logprise:test_send_notification:51 - Database connection failed" in notification["body"]
+    assert " | CRITICAL | test_logprise:test_send_notification:52 - System shutdown initiated" in notification["body"]
 
     # Buffer should be cleared after sending
     assert len(appriser.buffer) == 0
@@ -129,9 +129,9 @@ def test_notification_level_changes():
     logger.error("Error message 1")
 
     assert len(appriser.buffer) == 2
-    assert "Info message 1" not in [record["message"] for record in appriser.buffer]
-    assert "Warning message 1" in [record["message"] for record in appriser.buffer]
-    assert "Error message 1" in [record["message"] for record in appriser.buffer]
+    assert "Info message 1" not in [message.record["message"] for message in appriser.buffer]
+    assert "Warning message 1" in [message.record["message"] for message in appriser.buffer]
+    assert "Error message 1" in [message.record["message"] for message in appriser.buffer]
 
     # Clear buffer
     appriser.buffer.clear()
@@ -149,8 +149,8 @@ def test_notification_level_changes():
     logger.warning("Warning message 3")
 
     assert len(appriser.buffer) == 2
-    assert "Info message 3" in [record["message"] for record in appriser.buffer]
-    assert "Warning message 3" in [record["message"] for record in appriser.buffer]
+    assert "Info message 3" in [message.record["message"] for message in appriser.buffer]
+    assert "Warning message 3" in [message.record["message"] for message in appriser.buffer]
 
 
 def test_notification_level_edge_cases():
@@ -195,7 +195,7 @@ def test_custom_log_level():
 
     # Verify the message was captured and level was handled appropriately
     assert len(appriser.buffer) == 1
-    record = appriser.buffer[0]
+    record = appriser.buffer[0].record
     # The level number should be preserved even if the name isn't in loguru
     assert record["level"].no == custom_level_num
 
@@ -218,9 +218,9 @@ def test_all_standard_levels():
         logger.log(level_name, f"Test message for {level_name}")
 
         # Find the corresponding record
-        matching_records = [r for r in appriser.buffer if r["level"].name == level_name]
+        matching_records = [r for r in appriser.buffer if r.record["level"].name == level_name]
         assert len(matching_records) == 1
-        assert matching_records[0]["level"].no == level_no
+        assert matching_records[0].record["level"].no == level_no
 
     # Verify total number of records
     assert len(appriser.buffer) == len(standard_levels)

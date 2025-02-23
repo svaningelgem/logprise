@@ -70,7 +70,7 @@ class Appriser:
 
     apprise_obj: apprise.Apprise = field(init=False, default_factory=apprise.Apprise)
     _notification_level: int = field(init=False, default=logger.level("ERROR").no)
-    buffer: list[loguru.Record] = field(init=False, default_factory=list)
+    buffer: list[loguru.Message] = field(init=False, default_factory=list)
 
     def _load_default_config_paths(self) -> None:
         config = apprise.AppriseConfig()
@@ -106,9 +106,8 @@ class Appriser:
 
     def accumulate_log(self, message: loguru.Message) -> None:
         """Accumulate logs that meet or exceed the notification level."""
-        record = message.record
-        if record["level"].no >= self.notification_level:
-            self.buffer.append(record)
+        if message.record["level"].no >= self.notification_level:
+            self.buffer.append(message)
 
     def send_notification(self) -> None:
         """Send a single notification with all accumulated logs."""
@@ -116,7 +115,7 @@ class Appriser:
             return
 
         # Format the buffered logs into a single message
-        message = "\n".join(f"{record['level'].name}: {record['message']}" for record in self.buffer)
+        message = "".join(self.buffer)
         self.apprise_obj.notify(title="Script Notifications", body=message)
         self.buffer.clear()  # Clear the buffer after sending
 
