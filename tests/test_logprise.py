@@ -1,3 +1,9 @@
+
+import logging
+import pytest
+from loguru import logger
+
+from logprise import Appriser
 import logging
 
 from loguru import logger
@@ -115,3 +121,111 @@ def test_multiple_notification_batching(notify_mock):
     assert "Error 2" in notification["body"]
     assert "Critical 1" in notification["body"]
     assert "Error 3" in notification["body"]
+
+
+def test_notification_level_changes():
+    """Test changing notification levels and verifying correct message capture"""
+    # Initialize with WARNING level
+    appriser = Appriser(apprise_trigger_level="WARNING")
+
+    # First batch: WARNING level
+    logger.info("Info message 1")
+    logger.warning("Warning message 1")
+    logger.error("Error message 1")
+
+    assert len(appriser.buffer) == 2
+    assert "Info message 1" not in [record["message"] for record in appriser.buffer]
+    assert "Warning message 1" in [record["message"] for record in appriser.buffer]
+    assert "Error message 1" in [record["message"] for record in appriser.buffer]
+
+    # Clear buffer
+    appriser.buffer.clear()
+
+    # Change to ERROR level
+    appriser.notification_level = "ERROR"
+    logger.info("Info message 2")
+    logger.warning("Warning message 2")
+
+    assert len(appriser.buffer) == 0
+
+    # Change to INFO level
+    appriser.notification_level = "INFO"
+    logger.info("Info message 3")
+    logger.warning("Warning message 3")
+
+    assert len(appriser.buffer) == 2
+    assert "Info message 3" in [record["message"] for record in appriser.buffer]
+    assert "Warning message 3" in [record["message"] for record in appriser.buffer]
+
+
+def test_notification_level_edge_cases():
+    """Test edge cases for notification levels"""
+    appriser = Appriser()
+
+    # Test setting levels in different formats
+    appriser.notification_level = "DEBUG"  # string
+    assert appriser.notification_level == logger.level("DEBUG").no
+
+    appriser.notification_level = 30  # int (WARNING level)
+    assert appriser.notification_level == logger.level("WARNING").no
+
+    appriser.notification_level = logger.level("ERROR")  # Level object
+    assert appriser.notification_level == logger.level("ERROR").no
+
+    # Test invalid level
+    with pytest.raises(TypeError):
+        appriser.notification_level = None
+
+    with pytest.raises(ValueError):
+        appriser.notification_level = "INVALID_LEVEL"
+
+
+def test_custom_log_level():
+    """Test handling of custom log levels that don't map to loguru levels"""
+    # Create a custom log level in standard logging
+    custom_level_num = 15  # Between DEBUG and INFO
+    custom_level_name = "CUSTOM"
+    logging.addLevelName(custom_level_num, custom_level_name)
+
+    # Set up standard logger with our custom level
+    standard_logger = logging.getLogger("custom_test")
+    standard_logger.setLevel(custom_level_num)
+    standard_logger.addHandler(InterceptHandler())
+
+    # Create Appriser with low threshold to catch all messages
+    appriser = Appriser(apprise_trigger_level="DEBUG")
+
+    # Log using our custom level
+    standard_logger.log(custom_level_num, "Custom level message")
+
+    # Verify the message was captured and level was handled appropriately
+    assert len(appriser.buffer) == 1
+    record = appriser.buffer[0]
+    # The level number should be preserved even if the name isn't in loguru
+    assert record["level"].no == custom_level_num
+
+
+def test_all_standard_levels():
+    """Test all standard logging levels are handled correctly"""
+    appriser = Appriser(apprise_trigger_level="DEBUG")
+
+    # Dictionary of standard logging levels and their expected loguru equivalents
+    standard_levels = {
+        logging.DEBUG: "DEBUG",
+        logging.INFO: "INFO",
+        logging.WARNING: "WARNING",
+        logging.ERROR: "ERROR",
+        logging.CRITICAL: "CRITICAL"
+    }
+
+    # Test each standard level
+    for level_no, level_name in standard_levels.items():
+        logger.log(level_name, f"Test message for {level_name}")
+
+        # Find the corresponding record
+        matching_records = [r for r in appriser.buffer if r["level"].name == level_name]
+        assert len(matching_records) == 1
+        assert matching_records[0]["level"].no == level_no
+
+    # Verify total number of records
+    assert len(appriser.buffer) == len(standard_levels)
