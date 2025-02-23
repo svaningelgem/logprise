@@ -12,6 +12,7 @@ dependencies = [
     "loguru",
     "apprise"
 ]
+urls = {Repository = "https://github.com/svaningelgem/logprise"}
 
 [tool.poetry]
 
