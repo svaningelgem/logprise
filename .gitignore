@@ -169,3 +169,12 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+# own stuff
+.idea/
+*.iml
+dist/
+.ruff_cache/
+.coverage
+coverage.xml

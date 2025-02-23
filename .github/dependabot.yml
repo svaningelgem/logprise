@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"  # Poetry uses pip under the hood
+    directory: "/"
+    schedule:
+      interval: "weekly"  # Check for updates weekly
+    groups:
+      python-dependencies:  # Group name
+        patterns:
+          - "*"  # Include all dependencies
+    open-pull-requests-limit: 10  # Limit the number of open PRs
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "github-actions"  # Also update GitHub Actions
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:  # Group name for GitHub Actions
+        patterns:
+          - "*"  # Include all GitHub Actions
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore"
