@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import atexit
 import logging
-from dataclasses import field, dataclass, InitVar
+from dataclasses import InitVar, dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
@@ -10,7 +10,8 @@ import apprise.cli
 import loguru._logger
 from loguru import logger
 
-__all__ = ["logger", "appriser"]
+
+__all__ = ["appriser", "logger"]
 
 
 # Intercept standard logging calls and forward them to loguru

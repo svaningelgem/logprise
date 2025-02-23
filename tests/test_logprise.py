@@ -1,14 +1,9 @@
-
 import logging
+
 import pytest
 from loguru import logger
 
-from logprise import Appriser
-import logging
-
-from loguru import logger
-
-from logprise import InterceptHandler, Appriser
+from logprise import Appriser, InterceptHandler
 
 
 def test_intercept_handler_forwards_to_loguru():
@@ -215,7 +210,7 @@ def test_all_standard_levels():
         logging.INFO: "INFO",
         logging.WARNING: "WARNING",
         logging.ERROR: "ERROR",
-        logging.CRITICAL: "CRITICAL"
+        logging.CRITICAL: "CRITICAL",
     }
 
     # Test each standard level
