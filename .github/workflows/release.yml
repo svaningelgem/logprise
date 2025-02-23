@@ -10,6 +10,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,15 +23,30 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
           cache: 'poetry'
 
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run ruff format check
+        run: poetry run ruff format --check --diff .
+
+      - name: Run ruff lint check
+        run: poetry run ruff check --diff .
+
+      - name: Run tests with coverage
+        run: poetry run pytest --cov=logprise --cov-report=xml
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v5
+        with:
+          fail_ci_if_error: true
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+
       - name: Build and publish
-        env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          poetry build
-          poetry publish
+        run: poetry publish --build

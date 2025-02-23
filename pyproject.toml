@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "logprise"
-version = "1.0.0"
+version = "1.0.1"
 description = "A package integrating loguru and apprise for logging and notifications"
 authors = ["Steven Van Ingelgem <steven@vaningelgem.be>"]
 license = "MIT"
