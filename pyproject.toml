@@ -30,7 +30,8 @@ build-backend = "poetry.core.masonry.api"
 # flake8-bugbear ('B'), flake8-comprehensions ('C4'),
 # flake8-quotes ('Q'), flake8-debugger ('T10'), mccabe ('C90'),
 # flake8-type-checking ('TCH'), ruff specific rules ('RUF')
-select = ["E", "F", "PL", "I", "N", "B", "C4", "Q", "T10", "C90", "TCH", "RUF", "UP", "ANN"]
+# flake8-pyi ('PYI')
+select = ["E", "F", "PL", "I", "N", "B", "C4", "Q", "T10", "C90", "TCH", "RUF", "UP", "ANN", "PYI"]
 
 # Ignore specific rules
 ignore = [
@@ -110,10 +111,6 @@ keep-runtime-typing = true
 
 [tool.ruff.lint.pylint]
 max-args = 8  # Maximum number of arguments to a function
-
-[tool.ruff.lint.flake8-annotations]
-allow-star-arg-any = true
-suppress-none-returning = true
 
 [tool.ruff.format]
 # Like Black, use double quotes for docstrings

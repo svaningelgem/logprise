@@ -174,3 +174,7 @@ cython_debug/
 # own stuff
 .idea/
 *.iml
+dist/
+.ruff_cache/
+.coverage
+coverage.xml
