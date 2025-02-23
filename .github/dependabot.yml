@@ -13,6 +13,9 @@ updates:
       - "dependencies"
     commit-message:
       prefix: "chore"
+    ignore:
+      - dependency-name: "urllib3"
+        versions: [">= 2.0.0"]  # Ignore versions 2.0.0 and above
 
   - package-ecosystem: "github-actions"  # Also update GitHub Actions
     directory: "/"
