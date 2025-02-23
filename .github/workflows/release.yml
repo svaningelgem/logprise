@@ -32,6 +32,14 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}  # Extract the tag (e.g., v1.0.0 or V2.3.4)
+          VERSION=${VERSION#v}              # Remove 'v' prefix if present
+          VERSION=${VERSION#V}              # Remove 'V' prefix if present
+          echo "Setting version to $VERSION"
+          poetry version $VERSION
+
       - name: Run ruff format check
         run: poetry run ruff format --check --diff .
 
