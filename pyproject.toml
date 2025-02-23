@@ -1,20 +1,19 @@
-[project]
+[tool.poetry]
 name = "logprise"
 version = "1.0.0"
 description = "A package integrating loguru and apprise for logging and notifications"
-authors = [
-    {name = "Steven Van Ingelgem",email = "steven@vaningelgem.be"}
-]
-license = {text = "MIT"}
+authors = ["Steven Van Ingelgem <steven@vaningelgem.be>"]
+license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-    "loguru",
-    "apprise"
+repository = "https://github.com/svaningelgem/logprise"
+packages = [
+    { include = "logprise" }
 ]
-urls = {Repository = "https://github.com/svaningelgem/logprise"}
 
-[tool.poetry]
+[tool.poetry.dependencies]
+python = ">=3.10"
+loguru = "*"
+apprise = "*"
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "*"
@@ -24,7 +23,6 @@ ruff = "*"
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
-
 
 [tool.ruff.lint]
 # Enable pycodestyle ('E'), pyflakes ('F'), pylint ('PL'), isort ('I'), pep8-naming ('N'),
