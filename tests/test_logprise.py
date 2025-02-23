@@ -1,7 +1,5 @@
 import logging
-from pathlib import Path
 
-import apprise
 from loguru import logger
 
 from logprise import InterceptHandler, Appriser
@@ -87,7 +85,7 @@ def test_config_file_loading(tmp_path, mocker):
     """Test that Appriser can load config from filesystem"""
     # Mock DEFAULT_CONFIG_PATHS to only use our temp directory
     config_path = tmp_path / "apprise.yml"
-    mocker.patch('apprise.cli.DEFAULT_CONFIG_PATHS', [str(config_path)])
+    mocker.patch("apprise.cli.DEFAULT_CONFIG_PATHS", [str(config_path)])
 
     # Create a temporary config file
     config_path.write_text("urls:\n      - mailto://localhost?from=me@local.be&to=you@local.be")

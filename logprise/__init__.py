@@ -35,7 +35,7 @@ class InterceptHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         # Skip if this is a propagated record we've already handled
-        if hasattr(record, '_has_been_handled_by_interceptor'):
+        if hasattr(record, "_has_been_handled_by_interceptor"):
             return
 
         # Mark record as handled to prevent duplicate processing
@@ -57,6 +57,7 @@ class InterceptHandler(logging.Handler):
         logger_opt = logger.opt(depth=depth + 2, exception=record.exc_info)
         logger_opt.log(level, record.getMessage())
 
+
 # Custom Appriser class to manage notifications
 @dataclass
 class Appriser:
@@ -74,9 +75,6 @@ class Appriser:
         config = apprise.AppriseConfig()
         for p in apprise.cli.DEFAULT_CONFIG_PATHS:
             if (resolved := Path(p).expanduser().resolve().absolute()).is_file():
-                text = resolved.read_text(encoding='utf8')
-                # if resolved.suffix.lower() in {'.yml', '.yaml'}:
-                #     urls =
                 config.add(str(resolved))
         self.apprise_obj.add(config)
 
@@ -117,9 +115,7 @@ class Appriser:
             return
 
         # Format the buffered logs into a single message
-        message = "\n".join(
-            f"{record['level'].name}: {record['message']}" for record in self.buffer
-        )
+        message = "\n".join(f"{record['level'].name}: {record['message']}" for record in self.buffer)
         self.apprise_obj.notify(title="Script Notifications", body=message)
         self.buffer.clear()  # Clear the buffer after sending
 
