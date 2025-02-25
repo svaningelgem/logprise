@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 import apprise.cli
 import loguru._logger
+from apprise.common import NotifyFormat
 from loguru import logger
 
 
@@ -170,9 +171,9 @@ class Appriser:
             return
 
         # Format the buffered logs into a single message
-        message = "".join(self.buffer)
-        self.apprise_obj.notify(title="Script Notifications", body=message)
-        self.buffer.clear()  # Clear the buffer after sending
+        message = "".join(self.buffer).replace("\r", "")
+        if self.apprise_obj.notify(title="Script Notifications", body=message, body_format=NotifyFormat.TEXT):
+            self.buffer.clear()  # Clear the buffer after sending
 
 
 appriser = Appriser()
