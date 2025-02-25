@@ -8,6 +8,8 @@ Logprise is a Python package that seamlessly integrates [loguru](https://github.
 - Automatic notification delivery based on configurable log levels
 - Batched notifications to prevent notification spam
 - Flexible configuration through apprise's extensive notification service support
+- Periodic flushing of log messages at configurable intervals
+- Automatic capture of uncaught exceptions
 - Easy integration with existing Python applications
 
 ## Installation
@@ -35,6 +37,7 @@ logger.warning("This won't trigger a notification")
 logger.error("This will trigger a notification")  # Default is ERROR level
 
 # Notifications are automatically sent when your program exits
+# or periodically according to the flush interval
 ```
 
 ## Configuration
@@ -73,18 +76,36 @@ appriser.notification_level = 30  # WARNING level
 appriser.notification_level = logger.level("ERROR")
 ```
 
-### Manual Notification Control
+### Controlling Notification Timing
 
-While notifications are sent automatically when your program exits, you can control them manually:
+Logprise offers several ways to control when notifications are sent:
 
 ```python
 from logprise import appriser
 
+# Set the flush interval for periodic notifications (in seconds)
+appriser.flush_interval = 3600  # Default is hourly
+
+# Manually send notifications immediately
+appriser.send_notification()
+
 # Clear the notification buffer
 appriser.buffer.clear()
 
-# Send notifications immediately
-appriser.send_notification()
+# Stop the periodic flush thread
+appriser.stop_periodic_flush()
+
+# Manually cleanup and flush pending notifications
+appriser.cleanup()
+```
+
+## Handling Uncaught Exceptions
+
+Logprise automatically captures uncaught exceptions and sends notifications. This helps you detect and respond to unexpected application failures:
+
+```python
+# This will be logged and trigger a notification
+raise ValueError("Something went wrong")
 ```
 
 ## Contributing

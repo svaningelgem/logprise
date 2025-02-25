@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import atexit
 import logging
+import sys
+import threading
 from dataclasses import InitVar, dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -65,12 +67,23 @@ class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
 
     apprise_trigger_level: InitVar[int | str | loguru.Level] = "ERROR"
-
     recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH
+    flush_interval: int | float = 3600  # Default 1 hour in seconds
+
+    _flush_thread: threading.Thread | None = field(init=False, default=None)
+    _stop_event: threading.Event = field(init=False, default_factory=threading.Event)
 
     apprise_obj: apprise.Apprise = field(init=False, default_factory=apprise.Apprise)
     _notification_level: int = field(init=False, default=logger.level("ERROR").no)
     buffer: list[loguru.Message] = field(init=False, default_factory=list)
+
+    def __post_init__(self, apprise_trigger_level: int | str | loguru.Level) -> None:
+        self._load_default_config_paths()
+        self.notification_level = apprise_trigger_level or "ERROR"
+        logger.add(self.accumulate_log, catch=False)
+        self._setup_interception_handler()
+        self._setup_exception_hook()
+        self._start_periodic_flush()
 
     def _load_default_config_paths(self) -> None:
         config = apprise.AppriseConfig()
@@ -81,12 +94,51 @@ class Appriser:
 
     def _setup_interception_handler(self) -> None:
         logging.basicConfig(handlers=[InterceptHandler()], level=self._notification_level, force=True)
+    def _setup_exception_hook(self) -> None:
+        """Set up a hook to capture uncaught exceptions."""
+        original_excepthook = sys.excepthook
 
-    def __post_init__(self, apprise_trigger_level: int | str | loguru.Level) -> None:
-        self._load_default_config_paths()
-        self.notification_level = apprise_trigger_level or "ERROR"
-        logger.add(self.accumulate_log, catch=False)
-        self._setup_interception_handler()
+        def custom_excepthook(exc_type, exc_value, exc_traceback):
+            # Log the exception
+            logger.opt(exception=(exc_type, exc_value, exc_traceback)).error(
+                f"Uncaught exception: {exc_type.__name__}: {exc_value}"
+            )
+            # Force send the notification immediately for uncaught exceptions
+            self.send_notification()
+            # Call the original excepthook
+            original_excepthook(exc_type, exc_value, exc_traceback)
+
+        sys.excepthook = custom_excepthook
+
+    def _periodic_flush(self) -> None:
+        """Periodically flush log buffer."""
+        while not self._stop_event.is_set():
+            # Wait for the specified interval, but allow early termination
+            if self._stop_event.wait(self.flush_interval):
+                break
+            if self.buffer:  # Only send if there are logs
+                self.send_notification()
+
+    def _start_periodic_flush(self) -> None:
+        """Start the periodic flush thread."""
+        self._stop_event.clear()
+        self._flush_thread = threading.Thread(
+            target=self._periodic_flush,
+            daemon=True,
+            name="logprise-flush"
+        )
+        self._flush_thread.start()
+
+    def stop_periodic_flush(self) -> None:
+        """Stop the periodic flush thread."""
+        if self._flush_thread and self._flush_thread.is_alive():
+            self._stop_event.set()
+            self._flush_thread.join(timeout=1.0)  # Wait for thread to terminate
+
+    def cleanup(self) -> None:
+        """Clean up resources and send any pending notifications."""
+        self.stop_periodic_flush()
+        self.send_notification()
 
     @property
     def notification_level(self) -> int:
@@ -121,4 +173,4 @@ class Appriser:
 
 
 appriser = Appriser()
-atexit.register(appriser.send_notification)
+atexit.register(appriser.cleanup)
