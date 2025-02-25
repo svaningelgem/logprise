@@ -123,11 +123,11 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.coverage.run]
-source = ["minecraft_log_watcher"]
+source = ["logprise"]
 branch = true
 
 [tool.coverage.report]
-exclude_lines = [
+exclude_also = [
     "pragma: no cover",
     "def __repr__",
     "raise NotImplementedError",
@@ -138,3 +138,7 @@ exclude_lines = [
     "@abc.abstractmethod"
 ]
 show_missing = true
+
+[tool.pytest.ini_options]
+#addopts = "--no-cov"  # This disables coverage
+addopts = "--cov=logprise --cov-branch --cov-report=html --cov-report=xml --cov-report=term"

@@ -148,3 +148,96 @@ def test_flush_only_if_buffer_has_content(notify_mock, monkeypatch):
 
     # Now send_notification should be called
     mock_send.assert_called_once()
+
+
+def test_periodic_flush_stops_on_event_set(mocker):
+    """Test that periodic_flush exits when stop_event is set."""
+    appriser = Appriser()
+
+    # Pre-set the stop event before calling _periodic_flush
+    appriser._stop_event.set()
+
+    # Add a log message to ensure buffer has content
+    logger.error("Test message")
+
+    # Mock send_notification to track calls
+    mock_send = mocker.patch.object(appriser, "send_notification")
+
+    # Run the periodic flush - it should exit immediately
+    appriser._periodic_flush()
+
+    # Verify send_notification was not called
+    mock_send.assert_not_called()
+
+    # Verify message still in buffer (didn't get cleared)
+    assert len(appriser.buffer) == 1
+    assert "Test message" in appriser.buffer[0].record["message"]
+
+
+def test_periodic_flush_empty_buffer(mocker):
+    """Test that periodic_flush skips sending when buffer is empty."""
+    appriser = Appriser()
+
+    # Clear buffer
+    appriser.buffer.clear()
+
+    # Mock send_notification to track calls
+    mock_send = mocker.patch.object(appriser, "send_notification")
+
+    # Set up stop_event to trigger after a short delay
+    def set_stop_after_delay():
+        time.sleep(0.1)  # Short delay
+        appriser._stop_event.set()
+
+    # Start a thread that will set the stop event after a delay
+    thread = threading.Thread(target=set_stop_after_delay)
+    thread.start()
+
+    # Run periodic flush - it should wait until stop_event is set
+    appriser._periodic_flush()
+
+    # Wait for our helper thread to complete
+    thread.join()
+
+    # Verify send_notification was not called since buffer was empty
+    mock_send.assert_not_called()
+
+
+def test_stop_periodic_flush_idempotent(mocker):
+    """Test that calling stop_periodic_flush twice is safe."""
+    appriser = Appriser()
+
+    # First call
+    appriser.stop_periodic_flush()
+    assert appriser._stop_event.is_set()
+
+    # Mock thread for second call
+    mock_thread = mocker.MagicMock()
+    mock_thread.is_alive.return_value = True
+    appriser._flush_thread = mock_thread
+    appriser._stop_event.clear()  # Reset to test second call
+
+    # Second call
+    appriser.stop_periodic_flush()
+
+    # Verify stop_event is set and join was called
+    assert appriser._stop_event.is_set()
+    mock_thread.join.assert_called_once()
+
+
+def test_notify_failure_preserves_buffer(mocker):
+    """Test that buffer is not cleared when notification fails."""
+    appriser = Appriser()
+
+    # Mock apprise_obj.notify to return False (failure)
+    mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)
+
+    # Add test message to buffer
+    logger.error("Test message that should remain in buffer")
+
+    # Try to send notification
+    appriser.send_notification()
+
+    # Verify buffer still contains the message
+    assert len(appriser.buffer) == 1
+    assert "Test message that should remain in buffer" in appriser.buffer[0].record["message"]

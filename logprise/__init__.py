@@ -171,8 +171,8 @@ class Appriser:
 
         # Format the buffered logs into a single message
         message = "".join(self.buffer)
-        self.apprise_obj.notify(title="Script Notifications", body=message)
-        self.buffer.clear()  # Clear the buffer after sending
+        if self.apprise_obj.notify(title="Script Notifications", body=message):
+            self.buffer.clear()  # Clear the buffer after sending
 
 
 appriser = Appriser()
