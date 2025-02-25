@@ -3,8 +3,7 @@ import threading
 import time
 from unittest.mock import MagicMock
 
-from logprise import Appriser
-from logprise import logger
+from logprise import Appriser, logger
 
 
 def test_uncaught_exception_hook(notify_mock, monkeypatch):
@@ -46,9 +45,9 @@ def test_periodic_flush(notify_mock, monkeypatch):
 
     # Verify thread was started with correct parameters
     mock_thread.assert_called_once()
-    assert mock_thread.call_args[1]['target'] == appriser._periodic_flush
-    assert mock_thread.call_args[1]['daemon'] is True
-    assert mock_thread.call_args[1]['name'] == 'logprise-flush'
+    assert mock_thread.call_args[1]["target"] == appriser._periodic_flush
+    assert mock_thread.call_args[1]["daemon"] is True
+    assert mock_thread.call_args[1]["name"] == "logprise-flush"
     mock_thread.return_value.start.assert_called_once()
 
 

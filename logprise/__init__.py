@@ -6,11 +6,15 @@ import sys
 import threading
 from dataclasses import InitVar, dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import apprise.cli
 import loguru._logger
 from loguru import logger
+
+
+if TYPE_CHECKING:
+    import types
 
 
 __all__ = ["appriser", "logger"]
@@ -94,11 +98,14 @@ class Appriser:
 
     def _setup_interception_handler(self) -> None:
         logging.basicConfig(handlers=[InterceptHandler()], level=self._notification_level, force=True)
+
     def _setup_exception_hook(self) -> None:
         """Set up a hook to capture uncaught exceptions."""
         original_excepthook = sys.excepthook
 
-        def custom_excepthook(exc_type, exc_value, exc_traceback):
+        def custom_excepthook(
+            exc_type: type[BaseException], exc_value: BaseException, exc_traceback: types.TracebackType | None
+        ) -> None:
             # Log the exception
             logger.opt(exception=(exc_type, exc_value, exc_traceback)).error(
                 f"Uncaught exception: {exc_type.__name__}: {exc_value}"
@@ -122,11 +129,7 @@ class Appriser:
     def _start_periodic_flush(self) -> None:
         """Start the periodic flush thread."""
         self._stop_event.clear()
-        self._flush_thread = threading.Thread(
-            target=self._periodic_flush,
-            daemon=True,
-            name="logprise-flush"
-        )
+        self._flush_thread = threading.Thread(target=self._periodic_flush, daemon=True, name="logprise-flush")
         self._flush_thread.start()
 
     def stop_periodic_flush(self) -> None:
