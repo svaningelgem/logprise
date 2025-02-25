@@ -11,7 +11,7 @@ def notify_mock(monkeypatch):
     """Only mock the notify method of Apprise"""
     calls = []
 
-    def mock_notify(self, title, body):
+    def mock_notify(self, title, body, *_, **__):
         calls.append({"title": title, "body": body})
         return True
 
