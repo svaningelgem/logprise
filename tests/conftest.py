@@ -1,4 +1,3 @@
-
 import pytest
 from apprise import Apprise
 
