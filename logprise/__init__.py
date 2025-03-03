@@ -101,7 +101,7 @@ class Appriser:
         def _new_remove(*args: object, **kwargs: object) -> None:
             self._old_logger_remove(*args, **kwargs)
 
-            if Appriser._accumulator_id is None or Appriser._accumulator_id not in logger._core.handlers:
+            if Appriser._accumulator_id not in logger._core.handlers:
                 Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
 
         loguru._Logger.remove = _new_remove
