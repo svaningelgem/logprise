@@ -6,7 +6,7 @@ def test_add_method(mocker):
     appriser = Appriser()
 
     # Create a mock for the underlying apprise_obj.add method
-    mock_add = mocker.patch.object(appriser.apprise_obj, 'add', return_value=True)
+    mock_add = mocker.patch.object(appriser.apprise_obj, "add", return_value=True)
 
     # Test with a simple string URL
     test_url = "mailto://user:pass@example.com"
