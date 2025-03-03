@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import atexit
+import functools
 import logging
 import sys
 import threading
 from dataclasses import InitVar, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Final
 
 import apprise.cli
+import loguru
 import loguru._logger
 from apprise.common import NotifyFormat
 from loguru import logger
@@ -16,7 +18,7 @@ from loguru import logger
 
 if TYPE_CHECKING:
     import types
-
+    from collections.abc import Callable
 
 __all__ = ["appriser", "logger"]
 
@@ -79,16 +81,34 @@ class Appriser:
     _stop_event: threading.Event = field(init=False, default_factory=threading.Event)
 
     apprise_obj: apprise.Apprise = field(init=False, default_factory=apprise.Apprise)
-    _notification_level: int = field(init=False, default=logger.level("ERROR").no)
+    _notification_level: int = field(init=False, default=loguru.logger.level("ERROR").no)
     buffer: list[loguru.Message] = field(init=False, default_factory=list)
+
+    _accumulator_id: ClassVar[int | None] = None
+    _old_logger_remove: Final[Callable] = loguru._Logger.remove
 
     def __post_init__(self, apprise_trigger_level: int | str | loguru.Level) -> None:
         self._load_default_config_paths()
         self.notification_level = apprise_trigger_level or "ERROR"
-        logger.add(self.accumulate_log, catch=False)
         self._setup_interception_handler()
         self._setup_exception_hook()
         self._start_periodic_flush()
+        self._setup_at_exit_cleanup()
+        self._setup_removal_prevention()
+
+    def _setup_removal_prevention(self) -> None:
+        @functools.wraps(self._old_logger_remove)
+        def _new_remove(*args: object, **kwargs: object) -> None:
+            self._old_logger_remove(*args, **kwargs)
+
+            if Appriser._accumulator_id is None or Appriser._accumulator_id not in logger._core.handlers:
+                Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
+
+        loguru._Logger.remove = _new_remove
+        Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
+
+    def _setup_at_exit_cleanup(self) -> None:
+        atexit.register(self.cleanup)
 
     def _load_default_config_paths(self) -> None:
         config = apprise.AppriseConfig()
@@ -177,4 +197,3 @@ class Appriser:
 
 
 appriser = Appriser()
-atexit.register(appriser.cleanup)

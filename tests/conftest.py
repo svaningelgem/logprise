@@ -1,4 +1,3 @@
-import contextlib
 
 import pytest
 from apprise import Apprise
@@ -21,5 +20,6 @@ def notify_mock(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def silence_logger():
-    with contextlib.suppress(ValueError):
-        logprise.logger.remove(0)
+    logprise.logger.remove()  # Silence any output
+    yield
+    logprise.logger.remove()  # And restore any handlers we added
