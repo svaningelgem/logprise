@@ -161,7 +161,16 @@ class Appriser:
         asset: AppriseAsset = None,
         tag: list[str] | None = None,
     ) -> bool:
-        """Adds one or more server URLs into our list."""
+        """
+        Adds one or more server URLs into our list.
+
+        This is a direct wrapper around the `apprise.Apprise.add()` method.
+        For detailed documentation, see:
+        https://github.com/caronc/apprise/wiki/Development_API#add-add-a-new-notification-service-by-urls
+
+        Returns:
+            True if the server(s) were added successfully, False otherwise.
+        """
 
         return self.apprise_obj.add(servers=servers, asset=asset, tag=tag)
 
