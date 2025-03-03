@@ -104,7 +104,7 @@ class Appriser:
         """Set up a hook to capture uncaught exceptions."""
         original_excepthook = sys.excepthook
 
-        def custom_excepthook(
+        def uncaught_exception(
             exc_type: type[BaseException], exc_value: BaseException, exc_traceback: types.TracebackType | None
         ) -> None:
             # Log the exception
@@ -116,7 +116,7 @@ class Appriser:
             # Call the original excepthook
             original_excepthook(exc_type, exc_value, exc_traceback)
 
-        sys.excepthook = custom_excepthook
+        sys.excepthook = uncaught_exception
 
     def _periodic_flush(self) -> None:
         """Periodically flush log buffer."""
