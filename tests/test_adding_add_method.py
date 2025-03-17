@@ -1,10 +1,8 @@
 from logprise import Appriser
 
 
-def test_add_method(mocker):
+def test_add_method(mocker, appriser: Appriser):
     """Test that add method correctly passes through to apprise_obj.add"""
-    appriser = Appriser()
-
     # Create a mock for the underlying apprise_obj.add method
     mock_add = mocker.patch.object(appriser.apprise_obj, "add", return_value=True)
 

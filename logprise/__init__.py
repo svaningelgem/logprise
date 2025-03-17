@@ -5,9 +5,10 @@ import functools
 import logging
 import sys
 import threading
+import datetime
 from dataclasses import InitVar, dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final
+from typing import TYPE_CHECKING, ClassVar, Final, Any
 
 import apprise.cli
 import loguru
@@ -23,6 +24,11 @@ if TYPE_CHECKING:
     from apprise import AppriseAsset, AppriseConfig, ConfigBase, NotifyBase
 
 __all__ = ["appriser", "logger"]
+
+
+# Helper function for timestamp
+def _timestamp() -> str:
+    return datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
 
 # Intercept standard logging calls and forward them to loguru
@@ -77,8 +83,9 @@ class Appriser:
 
     apprise_trigger_level: InitVar[int | str | loguru.Level] = "ERROR"
     recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH
-    flush_interval: int | float = 3600  # Default 1 hour in seconds
+    flush_every_x_seconds: InitVar[int | float] = 3600  # Default 1 hour in seconds
 
+    _flush_interval: int | float = field(init=False, default=flush_every_x_seconds)
     _flush_thread: threading.Thread | None = field(init=False, default=None)
     _stop_event: threading.Event = field(init=False, default_factory=threading.Event)
 
@@ -88,26 +95,47 @@ class Appriser:
 
     _accumulator_id: ClassVar[int | None] = None
     _old_logger_remove: Final[Callable] = loguru._Logger.remove
+    _instance: "Appriser" = field(init=False, default=None)
 
-    def __post_init__(self, apprise_trigger_level: int | str | loguru.Level) -> None:
+    def __new__(cls, *args: Any, **kwargs: Any) -> "Appriser":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __post_init__(self, apprise_trigger_level: int | str | loguru.Level, flush_every_x_seconds: int | float) -> None:
         self._load_default_config_paths()
         self.notification_level = apprise_trigger_level or "ERROR"
         self._setup_interception_handler()
         self._setup_exception_hook()
-        self._start_periodic_flush()
+        self.flush_interval = flush_every_x_seconds
         self._setup_at_exit_cleanup()
         self._setup_removal_prevention()
 
+    @property
+    def flush_interval(self) -> int | float:
+        return self._flush_interval
+
+    @flush_interval.setter
+    def flush_interval(self, interval: int | float) -> None:
+        self._flush_interval = interval
+        self.stop_periodic_flush()
+        self._start_periodic_flush()
+
     def _setup_removal_prevention(self) -> None:
+        def _readd():
+            print(f"[{_timestamp()}] id: {Appriser._accumulator_id}")
+            print(f"[{_timestamp()}] handlers: {logger._core.handlers}")
+            if Appriser._accumulator_id not in logger._core.handlers:
+                print(f"[{_timestamp()}] --> ADDING!")
+                Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
+
         @functools.wraps(self._old_logger_remove)
         def _new_remove(*args: object, **kwargs: object) -> None:
             self._old_logger_remove(*args, **kwargs)
-
-            if Appriser._accumulator_id not in logger._core.handlers:
-                Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
+            _readd()
 
         loguru._Logger.remove = _new_remove
-        Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
+        _readd()
 
     def _setup_at_exit_cleanup(self) -> None:
         atexit.register(self.cleanup)
@@ -127,7 +155,7 @@ class Appriser:
         original_excepthook = sys.excepthook
 
         def uncaught_exception(
-            exc_type: type[BaseException], exc_value: BaseException, exc_traceback: types.TracebackType | None
+                exc_type: type[BaseException], exc_value: BaseException, exc_traceback: types.TracebackType | None
         ) -> None:
             # Log the exception
             logger.opt(exception=(exc_type, exc_value, exc_traceback)).error(
@@ -146,8 +174,12 @@ class Appriser:
             # Wait for the specified interval, but allow early termination
             if self._stop_event.wait(self.flush_interval):
                 break
-            if self.buffer:  # Only send if there are logs
-                self.send_notification()
+            print(f"[{_timestamp()}] ==================================================")
+            print(f"[{_timestamp()}] Flushing log buffer ({len(self.buffer)}).")
+            for line in self.buffer:
+                print(f"[{_timestamp()}]   - {line}")
+            print(f"[{_timestamp()}] ==================================================")
+            self.send_notification()
 
     def _start_periodic_flush(self) -> None:
         """Start the periodic flush thread."""
@@ -156,10 +188,10 @@ class Appriser:
         self._flush_thread.start()
 
     def add(
-        self,
-        servers: str | dict | Iterable | ConfigBase | NotifyBase | AppriseConfig,
-        asset: AppriseAsset = None,
-        tag: list[str] | None = None,
+            self,
+            servers: str | dict | Iterable | ConfigBase | NotifyBase | AppriseConfig,
+            asset: AppriseAsset = None,
+            tag: list[str] | None = None,
     ) -> bool:
         """
         Adds one or more server URLs into our list.
@@ -174,8 +206,15 @@ class Appriser:
 
         return self.apprise_obj.add(servers=servers, asset=asset, tag=tag)
 
+    def clear(self) -> None:
+        self.apprise_obj.clear()
+        self.buffer.clear()
+        self._stop_event.clear()
+
     def stop_periodic_flush(self) -> None:
         """Stop the periodic flush thread."""
+        print(f"flush thread: {self._flush_thread}")
+        print(f"flush thread alive?: {self._flush_thread and self._flush_thread.is_alive()}")
         if self._flush_thread and self._flush_thread.is_alive():
             self._stop_event.set()
             self._flush_thread.join(timeout=1.0)  # Wait for thread to terminate
@@ -203,8 +242,11 @@ class Appriser:
 
     def accumulate_log(self, message: loguru.Message) -> None:
         """Accumulate logs that meet or exceed the notification level."""
+        print(f"[{_timestamp()}] [accumulate_log] {message}")
         if message.record["level"].no >= self.notification_level:
+            print(f"[{_timestamp()}] --> ADDING TO BUFFER")
             self.buffer.append(message)
+            print(f"[{_timestamp()}] --> BUFFER: {self.buffer}")
 
     def send_notification(self) -> None:
         """Send a single notification with all accumulated logs."""
@@ -213,7 +255,10 @@ class Appriser:
 
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
-        if self.apprise_obj.notify(title="Script Notifications", body=message, body_format=NotifyFormat.TEXT):
+        if not self.apprise_obj or self.apprise_obj.notify(
+                title="Script Notifications", body=message, body_format=NotifyFormat.TEXT
+        ):
+            print(f"[{_timestamp()}] *** REMOVING BUFFER")
             self.buffer.clear()  # Clear the buffer after sending
 
 

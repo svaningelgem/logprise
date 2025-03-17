@@ -1,7 +1,37 @@
+from typing import Any, Generator
+
 import pytest
-from apprise import Apprise
+from apprise import Apprise, NotifyBase, NotifyType
 
 import logprise
+
+
+class NoOpNotifier(NotifyBase):
+    """No-operation notifier that silently discards messages."""
+
+    # Define the default secure protocol
+    secure_protocol = False
+
+    # Define protocol(s) this notification supports
+    protocol = ("noop", "dummy")
+
+    def __init__(self, **kwargs):
+        super().__init__(secure=False, **kwargs)
+
+    def url(self, privacy: bool = False, *args: Any, **kwargs: Any) -> str:
+        return "noop://"
+
+    def send(self, body: str, title: str = "", notify_type: NotifyType = NotifyType.INFO, **kwargs: Any) -> bool:
+        # Simply return True to simulate successful notification
+        return True
+
+
+@pytest.fixture()
+def appriser(monkeypatch) -> Generator[logprise.Appriser, None, None]:
+    a = logprise.Appriser()
+    a.add(NoOpNotifier())
+    yield a
+    a.clear()
 
 
 @pytest.fixture(autouse=True)

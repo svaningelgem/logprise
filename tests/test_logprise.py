@@ -6,15 +6,12 @@ from loguru import logger
 from logprise import Appriser, InterceptHandler
 
 
-def test_intercept_handler_forwards_to_loguru():
+def test_intercept_handler_forwards_to_loguru(appriser: Appriser):
     """Test that standard logging messages get forwarded to loguru"""
     # Configure standard logging to use our handler
     standard_logger = logging.getLogger("test_logger")
     standard_logger.addHandler(InterceptHandler())
     standard_logger.setLevel(logging.DEBUG)
-
-    # Create an Appriser to capture the logs
-    appriser = Appriser()
 
     # Log using standard logging
     test_message = "Test log message"
@@ -26,9 +23,9 @@ def test_intercept_handler_forwards_to_loguru():
     assert appriser.buffer[0].record["level"].name == "ERROR"
 
 
-def test_appriser_notification_levels():
+def test_appriser_notification_levels(appriser):
     """Test that Appriser respects different notification levels"""
-    appriser = Appriser(apprise_trigger_level="WARNING")
+    appriser.notification_level = "WARNING"
 
     # These should be captured
     logger.warning("Test warning")
@@ -43,10 +40,8 @@ def test_appriser_notification_levels():
     assert all(message.record["level"].no >= logger.level("WARNING").no for message in appriser.buffer)
 
 
-def test_send_notification(notify_mock):
+def test_send_notification(notify_mock, appriser):
     """Test the complete flow from logging to notification"""
-    appriser = Appriser()
-
     # Generate some logs
     logger.error("Database connection failed")
     logger.critical("System shutdown initiated")
@@ -58,16 +53,16 @@ def test_send_notification(notify_mock):
     assert len(notify_mock) == 1
     notification = notify_mock[0]
     assert notification["title"] == "Script Notifications"
-    assert " | ERROR    | test_logprise:test_send_notification:51 - Database connection failed" in notification["body"]
-    assert " | CRITICAL | test_logprise:test_send_notification:52 - System shutdown initiated" in notification["body"]
+    assert " | ERROR    | test_logprise:test_send_notification:46 - Database connection failed" in notification["body"]
+    assert " | CRITICAL | test_logprise:test_send_notification:47 - System shutdown initiated" in notification["body"]
 
     # Buffer should be cleared after sending
     assert len(appriser.buffer) == 0
 
 
-def test_send_notification_empty():
+def test_send_notification_empty(appriser: Appriser):
     """Test sending notification with no triggers"""
-    appriser = Appriser(apprise_trigger_level="ERROR")
+    appriser.notification_level = "ERROR"
 
     # Log messages below notification level
     logger.debug("Debug message")
@@ -82,7 +77,7 @@ def test_send_notification_empty():
     assert len(appriser.buffer) == 0
 
 
-def test_config_file_loading(tmp_path, mocker):
+def test_config_file_loading(tmp_path, mocker, appriser: Appriser):
     """Test that Appriser can load config from filesystem"""
     # Mock DEFAULT_CONFIG_PATHS to only use our temp directory
     config_path = tmp_path / "apprise.yml"
@@ -91,15 +86,12 @@ def test_config_file_loading(tmp_path, mocker):
     # Create a temporary config file
     config_path.write_text("urls:\n      - mailto://localhost?from=me@local.be&to=you@local.be")
 
-    appriser = Appriser()
     # If config is loaded successfully, urls will be populated
     assert len(appriser.apprise_obj) == 1
 
 
-def test_multiple_notification_batching(notify_mock):
+def test_multiple_notification_batching(notify_mock, appriser: Appriser):
     """Test that multiple log messages get batched into single notification"""
-    appriser = Appriser()
-
     # Generate logs over time
     logger.error("Error 1")
     logger.error("Error 2")
@@ -118,10 +110,10 @@ def test_multiple_notification_batching(notify_mock):
     assert "Error 3" in notification["body"]
 
 
-def test_notification_level_changes():
+def test_notification_level_changes(appriser: Appriser):
     """Test changing notification levels and verifying correct message capture"""
     # Initialize with WARNING level
-    appriser = Appriser(apprise_trigger_level="WARNING")
+    appriser.notification_level = "WARNING"
 
     # First batch: WARNING level
     logger.info("Info message 1")
@@ -153,10 +145,8 @@ def test_notification_level_changes():
     assert "Warning message 3" in [message.record["message"] for message in appriser.buffer]
 
 
-def test_notification_level_edge_cases():
+def test_notification_level_edge_cases(appriser: Appriser):
     """Test edge cases for notification levels"""
-    appriser = Appriser()
-
     # Test setting levels in different formats
     appriser.notification_level = "DEBUG"  # string
     assert appriser.notification_level == logger.level("DEBUG").no
@@ -175,7 +165,7 @@ def test_notification_level_edge_cases():
         appriser.notification_level = "INVALID_LEVEL"
 
 
-def test_custom_log_level():
+def test_custom_log_level(appriser: Appriser):
     """Test handling of custom log levels that don't map to loguru levels"""
     # Create a custom log level in standard logging
     custom_level_num = 15  # Between DEBUG and INFO
@@ -188,7 +178,7 @@ def test_custom_log_level():
     standard_logger.addHandler(InterceptHandler())
 
     # Create Appriser with low threshold to catch all messages
-    appriser = Appriser(apprise_trigger_level="DEBUG")
+    appriser.notification_level = "DEBUG"
 
     # Log using our custom level
     standard_logger.log(custom_level_num, "Custom level message")
@@ -200,9 +190,9 @@ def test_custom_log_level():
     assert record["level"].no == custom_level_num
 
 
-def test_all_standard_levels():
+def test_all_standard_levels(appriser: Appriser):
     """Test all standard logging levels are handled correctly"""
-    appriser = Appriser(apprise_trigger_level="DEBUG")
+    appriser.notification_level = "DEBUG"
 
     # Dictionary of standard logging levels and their expected loguru equivalents
     standard_levels = {
