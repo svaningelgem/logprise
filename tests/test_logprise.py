@@ -1,4 +1,5 @@
 import logging
+import re
 
 import pytest
 from loguru import logger
@@ -43,9 +44,10 @@ def test_appriser_notification_levels():
     assert all(message.record["level"].no >= logger.level("WARNING").no for message in appriser.buffer)
 
 
-def test_send_notification(notify_mock):
+def test_send_notification(notify_mock, noop):
     """Test the complete flow from logging to notification"""
     appriser = Appriser()
+    appriser.add(noop)
 
     # Generate some logs
     logger.error("Database connection failed")
@@ -58,8 +60,8 @@ def test_send_notification(notify_mock):
     assert len(notify_mock) == 1
     notification = notify_mock[0]
     assert notification["title"] == "Script Notifications"
-    assert " | ERROR    | test_logprise:test_send_notification:51 - Database connection failed" in notification["body"]
-    assert " | CRITICAL | test_logprise:test_send_notification:52 - System shutdown initiated" in notification["body"]
+    assert re.search(" \| ERROR    \| test_logprise:test_send_notification:\d+ - Database connection failed", notification["body"])
+    assert re.search(" \| CRITICAL \| test_logprise:test_send_notification:\d+ - System shutdown initiated", notification["body"])
 
     # Buffer should be cleared after sending
     assert len(appriser.buffer) == 0
@@ -96,9 +98,10 @@ def test_config_file_loading(tmp_path, mocker):
     assert len(appriser.apprise_obj) == 1
 
 
-def test_multiple_notification_batching(notify_mock):
+def test_multiple_notification_batching(notify_mock, noop):
     """Test that multiple log messages get batched into single notification"""
     appriser = Appriser()
+    appriser.add(noop)
 
     # Generate logs over time
     logger.error("Error 1")
