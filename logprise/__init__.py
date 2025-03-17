@@ -213,7 +213,9 @@ class Appriser:
 
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
-        if self.apprise_obj and self.apprise_obj.notify(title="Script Notifications", body=message, body_format=NotifyFormat.TEXT):
+        if self.apprise_obj and self.apprise_obj.notify(
+            title="Script Notifications", body=message, body_format=NotifyFormat.TEXT
+        ):
             self.buffer.clear()  # Clear the buffer after sending
 
 

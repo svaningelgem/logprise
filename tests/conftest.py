@@ -1,12 +1,9 @@
-import pytest
-from apprise import Apprise
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from apprise import Apprise, NotifyBase, NotifyType
 
 import logprise
-
 
 
 class NoOpNotifier(NotifyBase):

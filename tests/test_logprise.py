@@ -60,8 +60,12 @@ def test_send_notification(notify_mock, noop):
     assert len(notify_mock) == 1
     notification = notify_mock[0]
     assert notification["title"] == "Script Notifications"
-    assert re.search(" \| ERROR    \| test_logprise:test_send_notification:\d+ - Database connection failed", notification["body"])
-    assert re.search(" \| CRITICAL \| test_logprise:test_send_notification:\d+ - System shutdown initiated", notification["body"])
+    assert re.search(
+        " \| ERROR    \| test_logprise:test_send_notification:\d+ - Database connection failed", notification["body"]
+    )
+    assert re.search(
+        " \| CRITICAL \| test_logprise:test_send_notification:\d+ - System shutdown initiated", notification["body"]
+    )
 
     # Buffer should be cleared after sending
     assert len(appriser.buffer) == 0
