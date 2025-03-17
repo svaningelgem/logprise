@@ -51,10 +51,11 @@ def test_periodic_flush(notify_mock, monkeypatch):
     mock_thread.return_value.start.assert_called_once()
 
 
-def test_periodic_flush_integration(notify_mock):
+def test_periodic_flush_integration(notify_mock, noop):
     """Test the periodic flush actually works (integration test)."""
     # Create an Appriser with a short flush interval
     appriser = Appriser(flush_interval=0.2)
+    appriser.add(noop)
 
     # Generate an error log (should be captured)
     logger.error("Test periodic flush")
@@ -88,9 +89,10 @@ def test_stop_periodic_flush():
     mock_thread.join.assert_called_once()
 
 
-def test_cleanup_method(notify_mock):
+def test_cleanup_method(notify_mock, noop):
     """Test that cleanup method stops the flush thread and sends pending notifications."""
     appriser = Appriser()
+    appriser.add(noop)
 
     # Mock stop_periodic_flush
     mock_stop = MagicMock()
