@@ -5,6 +5,7 @@ from typing import ClassVar, Final
 
 import apprise
 import loguru
+from apprise import NotifyFormat
 from loguru import logger
 
 __all__: list[str] = ["appriser", "logger"]
@@ -57,6 +58,6 @@ class Appriser:
     @notification_level.setter
     def notification_level(self, value: int | str | loguru.Level) -> None: ...
     def accumulate_log(self, message: loguru.Message) -> None: ...
-    def send_notification(self) -> None: ...
+    def send_notification(self, title: str = "Script Notifications", body_format: str | NotifyFormat = ...) -> None: ...
 
 appriser: Appriser

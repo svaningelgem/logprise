@@ -206,16 +206,16 @@ class Appriser:
         if message.record["level"].no >= self.notification_level:
             self.buffer.append(message)
 
-    def send_notification(self) -> None:
+    def send_notification(
+        self, title: str = "Script Notifications", body_format: str | NotifyFormat = NotifyFormat.TEXT
+    ) -> None:
         """Send a single notification with all accumulated logs."""
         if not self.buffer:
             return
 
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
-        if self.apprise_obj and self.apprise_obj.notify(
-            title="Script Notifications", body=message, body_format=NotifyFormat.TEXT
-        ):
+        if self.apprise_obj and self.apprise_obj.notify(title=title, body=message, body_format=body_format):
             self.buffer.clear()  # Clear the buffer after sending
 
 

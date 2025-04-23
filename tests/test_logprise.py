@@ -2,6 +2,7 @@ import logging
 import re
 
 import pytest
+from apprise import NotifyFormat
 from loguru import logger
 
 from logprise import Appriser, InterceptHandler
@@ -231,3 +232,20 @@ def test_all_standard_levels():
 
     # Verify total number of records
     assert len(appriser.buffer) == len(standard_levels)
+
+
+def test_send_notification_parameters(mocker, noop):
+    test_message = "Test log message"
+    custom_title = "Custom Title"
+    custom_format = NotifyFormat.MARKDOWN
+
+    appriser = Appriser()
+    appriser.add(noop)
+    appriser.buffer.append(test_message)
+
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    appriser.send_notification(title=custom_title, body_format=custom_format)
+
+    mock_notify.assert_called_once_with(title=custom_title, body=test_message, body_format=custom_format)
+    assert len(appriser.buffer) == 0
