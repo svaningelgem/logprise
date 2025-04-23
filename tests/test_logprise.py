@@ -239,7 +239,6 @@ def test_send_notification_parameters(mocker, noop):
     custom_title = "Custom Title"
     custom_format = NotifyFormat.MARKDOWN
 
-
     appriser = Appriser()
     appriser.add(noop)
     appriser.buffer.append(test_message)
