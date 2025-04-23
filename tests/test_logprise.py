@@ -2,7 +2,7 @@ import logging
 import re
 
 import pytest
-from apprise import NotifyFormat
+from apprise import NotifyFormat, NotifyType
 from loguru import logger
 
 from logprise import Appriser, InterceptHandler
@@ -237,6 +237,7 @@ def test_all_standard_levels():
 def test_send_notification_parameters(mocker, noop):
     test_message = "Test log message"
     custom_title = "Custom Title"
+    custom_type = "success"
     custom_format = NotifyFormat.MARKDOWN
 
     appriser = Appriser()
@@ -245,7 +246,48 @@ def test_send_notification_parameters(mocker, noop):
 
     mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
 
-    appriser.send_notification(title=custom_title, body_format=custom_format)
+    appriser.send_notification(title=custom_title, notify_type=custom_type, body_format=custom_format)
 
-    mock_notify.assert_called_once_with(title=custom_title, body=test_message, body_format=custom_format)
+    mock_notify.assert_called_once_with(
+        title=custom_title, notify_type=custom_type, body=test_message, body_format=custom_format
+    )
+    assert len(appriser.buffer) == 0
+
+
+@pytest.mark.parametrize(
+    "notify_type_param, notify_format_param",
+    [
+        # Using string values
+        ("info", "text"),
+        ("success", "markdown"),
+        ("warning", "html"),
+        ("failure", "text"),
+        # Using Apprise enum objects
+        (NotifyType.INFO, NotifyFormat.TEXT),
+        (NotifyType.SUCCESS, NotifyFormat.MARKDOWN),
+        (NotifyType.WARNING, NotifyFormat.HTML),
+        (NotifyType.FAILURE, NotifyFormat.TEXT),
+        # Mixed: string type with enum format and vice versa
+        ("info", NotifyFormat.HTML),
+        (NotifyType.SUCCESS, "markdown"),
+    ],
+)
+def test_notification_parameter_types(mocker, noop, notify_type_param, notify_format_param):
+    """Test that Appriser accepts different parameter types for notify_type and body_format"""
+    test_message = "Test log message"
+    custom_title = "Custom Title"
+
+    appriser = Appriser()
+    appriser.add(noop)
+    appriser.buffer.append(test_message)
+
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    # Call with the parametrized values
+    appriser.send_notification(title=custom_title, notify_type=notify_type_param, body_format=notify_format_param)
+
+    # Verify the parameters were passed through correctly
+    mock_notify.assert_called_once_with(
+        title=custom_title, notify_type=notify_type_param, body=test_message, body_format=notify_format_param
+    )
     assert len(appriser.buffer) == 0
