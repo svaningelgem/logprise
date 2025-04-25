@@ -1,4 +1,5 @@
 import logging
+import sys
 import threading
 from collections.abc import Callable, Iterable
 from typing import ClassVar, Final
@@ -25,12 +26,21 @@ class Appriser:
     buffer: list[loguru.Message]
     recursion_depth: int
     flush_interval: int | float
+    # This is a class variable with default value 'ERROR'
+    apprise_trigger_level: ClassVar[str] = "ERROR"
 
     _flush_thread: threading.Thread | None
     _stop_event: threading.Event
 
     _accumulator_id: ClassVar[int | None]
-    _old_logger_remove: Final[Callable]
+    _old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]]
+
+    __match_args__: ClassVar[tuple[str, ...]] = (
+        "apprise_trigger_level",
+        "recursion_depth",
+        "flush_interval",
+        "_old_logger_remove",
+    )
 
     def __init__(
         self,
@@ -38,6 +48,7 @@ class Appriser:
         recursion_depth: int = ...,
         flush_interval: float = 3600,
     ) -> None: ...
+    def __post_init__(self, apprise_trigger_level: int | str | loguru.Level) -> None: ...
     def _load_default_config_paths(self) -> None: ...
     def _setup_interception_handler(self) -> None: ...
     def _setup_exception_hook(self) -> None: ...
@@ -47,7 +58,12 @@ class Appriser:
     def _setup_removal_prevention(self) -> None: ...
     def add(
         self,
-        servers: str | dict | Iterable | apprise.ConfigBase | apprise.NotifyBase | apprise.AppriseConfig,
+        servers: str
+        | dict[str, object]
+        | Iterable[str]
+        | apprise.ConfigBase
+        | apprise.NotifyBase
+        | apprise.AppriseConfig,
         asset: apprise.AppriseAsset | None = None,
         tag: list[str] | None = None,
     ) -> bool: ...
@@ -59,5 +75,8 @@ class Appriser:
     def notification_level(self, value: int | str | loguru.Level) -> None: ...
     def accumulate_log(self, message: loguru.Message) -> None: ...
     def send_notification(self, title: str = "Script Notifications", body_format: str | NotifyFormat = ...) -> None: ...
+
+    if sys.version_info >= (3, 13):
+        def __replace__(self, /, **changes: object) -> Appriser: ...
 
 appriser: Appriser
