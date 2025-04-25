@@ -44,44 +44,28 @@ jobs:
           poetry version $VERSION
 
       - name: Run ruff format check
-        continue-on-error: true
-        id: ruff-format
+        if: always()
         run: poetry run ruff format --check --diff .
 
       - name: Run ruff lint check
-        continue-on-error: true
-        id: ruff-lint
+        if: always()
         run: poetry run ruff check --diff .
 
       - name: Run consistency checks between stub & module
-        continue-on-error: true
-        id: stubtest
+        if: always()
         env:
           PYTHONPATH: "."
         run: poetry run stubtest logprise
 
       - name: Running mypy
-        continue-on-error: true
-        id: mypy
+        if: always()
         env:
           PYTHONPATH: "."
         run: poetry run mypy .
 
       - name: Run tests with coverage
-        continue-on-error: true
-        id: pytest
+        if: always()
         run: poetry run pytest --cov=logprise --cov-report=xml
-
-      - name: Check if any quality check failed
-        if: |
-          steps.ruff-format.outcome == 'failure' ||
-          steps.ruff-lint.outcome == 'failure' ||
-          steps.stubtest.outcome == 'failure' ||
-          steps.mypy.outcome == 'failure' ||
-          steps.pytest.outcome == 'failure'
-        run: |
-          echo "At least one quality check failed"
-          exit 1
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v5
