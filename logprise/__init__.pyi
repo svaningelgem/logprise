@@ -5,7 +5,7 @@ from typing import ClassVar, Final
 
 import apprise
 import loguru
-from apprise import NotifyFormat, NotifyType
+from apprise import NotifyFormat
 from loguru import logger
 
 __all__: list[str] = ["appriser", "logger"]
