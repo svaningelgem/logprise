@@ -88,6 +88,12 @@ def test_stop_periodic_flush():
     assert appriser._stop_event.is_set()
     mock_thread.join.assert_called_once()
 
+    mock_thread.reset_mock()
+    appriser._flush_thread = None
+    appriser.stop_periodic_flush()
+    assert appriser._stop_event.is_set()
+    mock_thread.join.assert_not_called()
+
 
 def test_cleanup_method(notify_mock, noop):
     """Test that cleanup method stops the flush thread and sends pending notifications."""
