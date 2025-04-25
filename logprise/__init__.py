@@ -212,7 +212,6 @@ class Appriser:
         title: str = "Script Notifications",
         notify_type: str | NotifyType = NotifyType.WARNING,
         body_format: str | NotifyFormat = NotifyFormat.TEXT,
-
     ) -> None:
         """Send a single notification with all accumulated logs."""
         if not self.buffer:
@@ -224,7 +223,6 @@ class Appriser:
         if self.apprise_obj and self.apprise_obj.notify(
             title=title, notify_type=notify_type, body=message, body_format=body_format
         ):
-
             self.buffer.clear()  # Clear the buffer after sending
 
 

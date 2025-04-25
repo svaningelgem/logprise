@@ -2,7 +2,6 @@ import logging
 import re
 
 import pytest
-
 from apprise import NotifyFormat, NotifyType
 from loguru import logger
 
@@ -291,9 +290,5 @@ def test_notification_parameter_types(mocker, noop, notify_type_param, notify_fo
     mock_notify.assert_called_once_with(
         title=custom_title, notify_type=notify_type_param, body=test_message, body_format=notify_format_param
     )
-
-    appriser.send_notification(title=custom_title, body_format=custom_format)
-
-    mock_notify.assert_called_once_with(title=custom_title, body=test_message, body_format=custom_format)
 
     assert len(appriser.buffer) == 0
