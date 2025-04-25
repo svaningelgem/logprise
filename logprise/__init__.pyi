@@ -1,4 +1,5 @@
 import logging
+import sys
 import threading
 from collections.abc import Callable, Iterable
 from typing import ClassVar, Final
@@ -74,5 +75,8 @@ class Appriser:
     def notification_level(self, value: int | str | loguru.Level) -> None: ...
     def accumulate_log(self, message: loguru.Message) -> None: ...
     def send_notification(self, title: str = "Script Notifications", body_format: str | NotifyFormat = ...) -> None: ...
+
+    if sys.version_info >= (3, 13):
+        def __replace__(self, /, **changes: object) -> Appriser: ...
 
 appriser: Appriser

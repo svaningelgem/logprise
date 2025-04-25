@@ -40,7 +40,7 @@ class InterceptHandler(logging.Handler):
             return True
         if "jetbrains/intellij" in filename:
             return True
-        if filename == "<string>":
+        if filename.endswith("<string>"):
             return True
 
         return any(skip_path in filename for skip_path in self.LOGGING_FILENAMES)
