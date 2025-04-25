@@ -87,7 +87,7 @@ class Appriser:
     buffer: list[loguru.Message] = field(init=False, default_factory=list)
 
     _accumulator_id: ClassVar[int | None] = None
-    _old_logger_remove: Final[Callable] = loguru._Logger.remove
+    _old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]] = loguru._Logger.remove
 
     def __post_init__(self, apprise_trigger_level: int | str | loguru.Level) -> None:
         self._load_default_config_paths()
@@ -157,7 +157,7 @@ class Appriser:
 
     def add(
         self,
-        servers: str | dict | Iterable | ConfigBase | NotifyBase | AppriseConfig,
+        servers: str | dict[str, object] | Iterable[str] | ConfigBase | NotifyBase | AppriseConfig,
         asset: AppriseAsset = None,
         tag: list[str] | None = None,
     ) -> bool:
