@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, ClassVar, Final
 import apprise.cli
 import loguru
 import loguru._logger
+from apprise import NotifyType
 from apprise.common import NotifyFormat
 from loguru import logger
 
@@ -207,7 +208,10 @@ class Appriser:
             self.buffer.append(message)
 
     def send_notification(
-        self, title: str = "Script Notifications", body_format: str | NotifyFormat = NotifyFormat.TEXT
+        self,
+        title: str = "Script Notifications",
+        notify_type: str | NotifyType = NotifyType.WARNING,
+        body_format: str | NotifyFormat = NotifyFormat.TEXT,
     ) -> None:
         """Send a single notification with all accumulated logs."""
         if not self.buffer:
@@ -215,7 +219,10 @@ class Appriser:
 
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
-        if self.apprise_obj and self.apprise_obj.notify(title=title, body=message, body_format=body_format):
+
+        if self.apprise_obj and self.apprise_obj.notify(
+            title=title, notify_type=notify_type, body=message, body_format=body_format
+        ):
             self.buffer.clear()  # Clear the buffer after sending
 
 

@@ -174,3 +174,5 @@ cython_debug/
 .idea/
 *.iml
 .ruff_cache/
+
+.vscode/
