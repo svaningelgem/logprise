@@ -1,5 +1,4 @@
 import logging
-import sys
 import threading
 from collections.abc import Callable, Iterable
 from typing import ClassVar, Final
@@ -80,8 +79,5 @@ class Appriser:
         notify_type: str | apprise.NotifyType = ...,
         body_format: str | NotifyFormat = ...,
     ) -> None: ...
-
-    if sys.version_info >= (3, 13):
-        def __replace__(self, /, **changes: object) -> Appriser: ...
 
 appriser: Appriser
