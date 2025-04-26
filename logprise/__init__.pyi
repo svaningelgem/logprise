@@ -1,9 +1,9 @@
 import logging
-import threading
-from collections.abc import Callable, Iterable
-from typing import ClassVar, Final
+from collections.abc import Iterable
+from typing import ClassVar
 
 import apprise
+import apprise.cli
 import loguru
 from apprise import NotifyFormat
 from loguru import logger
@@ -21,40 +21,18 @@ class InterceptHandler(logging.Handler):
 
 class Appriser:
     apprise_obj: apprise.Apprise
-    _notification_level: int
     buffer: list[loguru.Message]
-    recursion_depth: int
-    flush_interval: int | float
-    # This is a class variable with default value 'ERROR'
+    recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH
+    flush_interval: int | float = 3600
     apprise_trigger_level: ClassVar[str] = "ERROR"
-
-    _flush_thread: threading.Thread | None
-    _stop_event: threading.Event
-
-    _accumulator_id: ClassVar[int | None]
-    _old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]]
-
-    __match_args__: ClassVar[tuple[str, ...]] = (
-        "apprise_trigger_level",
-        "recursion_depth",
-        "flush_interval",
-        "_old_logger_remove",
-    )
 
     def __init__(
         self,
         *,
         apprise_trigger_level: int | str | loguru.Level = "ERROR",
-        recursion_depth: int = ...,
+        recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
         flush_interval: float = 3600,
     ) -> None: ...
-    def _load_default_config_paths(self) -> None: ...
-    def _setup_interception_handler(self) -> None: ...
-    def _setup_exception_hook(self) -> None: ...
-    def _periodic_flush(self) -> None: ...
-    def _start_periodic_flush(self) -> None: ...
-    def _setup_at_exit_cleanup(self) -> None: ...
-    def _setup_removal_prevention(self) -> None: ...
     def add(
         self,
         servers: str

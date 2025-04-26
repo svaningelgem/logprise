@@ -87,17 +87,21 @@ class Appriser:
         flush_interval: float = 3600,
     ) -> None:
         # Internal variables
+        self._notification_level: int = loguru.logger.level("ERROR").no  # The default
+        self.notification_level = apprise_trigger_level or "ERROR"  # Let the property handle the conversion
+
+        self._flush_interval: int | float = 3600  # The default
+        self.flush_interval = flush_interval  # Let the property handle the conversion
+
         self.recursion_depth: int = recursion_depth
-        self._flush_interval: int | float = flush_interval
-        self._flush_thread: threading.Thread = None
-        self._stop_event: threading.Event = threading.Event()
         self.apprise_obj: apprise.Apprise = apprise.Apprise()
-        self._notification_level: int = loguru.logger.level("ERROR").no
         self.buffer: list[loguru.Message] = []
+
+        self._flush_thread: threading.Thread | None = None
+        self._stop_event: threading.Event = threading.Event()
 
         # Initialize everything
         self._load_default_config_paths()
-        self.notification_level = apprise_trigger_level or "ERROR"
         self._setup_interception_handler()
         self._setup_exception_hook()
         self._start_periodic_flush()
