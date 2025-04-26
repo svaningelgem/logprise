@@ -5,7 +5,6 @@ import functools
 import logging
 import sys
 import threading
-from dataclasses import InitVar, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 
@@ -71,28 +70,38 @@ class InterceptHandler(logging.Handler):
         logger_opt.log(level, record.getMessage())
 
 
+_old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]] = loguru._Logger.remove
+
+
 # Custom Appriser class to manage notifications
-@dataclass
 class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
 
-    apprise_trigger_level: InitVar[int | str | loguru.Level] = "ERROR"
-    recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH
-    flush_interval: int | float = 3600  # Default 1 hour in seconds
-
-    _flush_thread: threading.Thread | None = field(init=False, default=None)
-    _stop_event: threading.Event = field(init=False, default_factory=threading.Event)
-
-    apprise_obj: apprise.Apprise = field(init=False, default_factory=apprise.Apprise)
-    _notification_level: int = field(init=False, default=loguru.logger.level("ERROR").no)
-    buffer: list[loguru.Message] = field(init=False, default_factory=list)
-
     _accumulator_id: ClassVar[int | None] = None
-    _old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]] = loguru._Logger.remove
 
-    def __post_init__(self, apprise_trigger_level: int | str | loguru.Level) -> None:
+    def __init__(
+        self,
+        *,
+        apprise_trigger_level: int | str | loguru.Level = "ERROR",
+        recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
+        flush_interval: float = 3600,
+    ) -> None:
+        self._flush_thread: threading.Thread | None = None
+        self._stop_event: threading.Event = threading.Event()
+
+        # Internal variables
+        self._notification_level: int = loguru.logger.level("ERROR").no  # The default
+        self.notification_level = apprise_trigger_level or "ERROR"  # Let the property handle the conversion
+
+        self._flush_interval: int | float = 3600  # The default
+        self.flush_interval = flush_interval  # Let the property handle the conversion
+
+        self.recursion_depth: int = recursion_depth
+        self.apprise_obj: apprise.Apprise = apprise.Apprise()
+        self.buffer: list[loguru.Message] = []
+
+        # Initialize everything
         self._load_default_config_paths()
-        self.notification_level = apprise_trigger_level or "ERROR"
         self._setup_interception_handler()
         self._setup_exception_hook()
         self._start_periodic_flush()
@@ -100,9 +109,9 @@ class Appriser:
         self._setup_removal_prevention()
 
     def _setup_removal_prevention(self) -> None:
-        @functools.wraps(self._old_logger_remove)
+        @functools.wraps(_old_logger_remove)
         def _new_remove(*args: object, **kwargs: object) -> None:
-            self._old_logger_remove(*args, **kwargs)
+            _old_logger_remove(*args, **kwargs)
 
             if Appriser._accumulator_id not in logger._core.handlers:
                 Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
@@ -141,14 +150,29 @@ class Appriser:
 
         sys.excepthook = uncaught_exception
 
+    @property
+    def flush_interval(self) -> int | float:
+        return self._flush_interval
+
+    @flush_interval.setter
+    def flush_interval(self, value: float) -> None:
+        """Set the flush interval."""
+        if not isinstance(value, int | float) or value <= 0:
+            raise ValueError(f"Flush interval must be a positive number, got {value}")
+
+        if self._flush_interval != value:
+            self._flush_interval = value
+            self.stop_periodic_flush()
+            self._start_periodic_flush()
+
     def _periodic_flush(self) -> None:
         """Periodically flush log buffer."""
         while not self._stop_event.is_set():
-            # Wait for the specified interval, but allow early termination
-            if self._stop_event.wait(self.flush_interval):
+            # Wait for the specified interval but allow early termination
+            if self._stop_event.wait(self._flush_interval):
                 break
-            if self.buffer:  # Only send if there are logs
-                self.send_notification()
+
+            self.send_notification()
 
     def _start_periodic_flush(self) -> None:
         """Start the periodic flush thread."""
