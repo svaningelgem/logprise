@@ -3,7 +3,6 @@ from collections.abc import Iterable
 from typing import ClassVar
 
 import apprise
-import apprise.cli
 import loguru
 from apprise import NotifyFormat
 from loguru import logger
@@ -22,7 +21,7 @@ class InterceptHandler(logging.Handler):
 class Appriser:
     apprise_obj: apprise.Apprise
     buffer: list[loguru.Message]
-    recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH
+    recursion_depth: int = ...
     flush_interval: int | float = 3600
     apprise_trigger_level: ClassVar[str] = "ERROR"
 
@@ -30,7 +29,7 @@ class Appriser:
         self,
         *,
         apprise_trigger_level: int | str | loguru.Level = "ERROR",
-        recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
+        recursion_depth: int = ...,
         flush_interval: float = 3600,
     ) -> None: ...
     def add(

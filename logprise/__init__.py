@@ -86,6 +86,9 @@ class Appriser:
         recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
         flush_interval: float = 3600,
     ) -> None:
+        self._flush_thread: threading.Thread | None = None
+        self._stop_event: threading.Event = threading.Event()
+
         # Internal variables
         self._notification_level: int = loguru.logger.level("ERROR").no  # The default
         self.notification_level = apprise_trigger_level or "ERROR"  # Let the property handle the conversion
@@ -96,9 +99,6 @@ class Appriser:
         self.recursion_depth: int = recursion_depth
         self.apprise_obj: apprise.Apprise = apprise.Apprise()
         self.buffer: list[loguru.Message] = []
-
-        self._flush_thread: threading.Thread | None = None
-        self._stop_event: threading.Event = threading.Event()
 
         # Initialize everything
         self._load_default_config_paths()
