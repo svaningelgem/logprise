@@ -36,8 +36,9 @@ def test_appriser_flush_interval_set_to_same_value(mocker: pytest_mock.MockerFix
     stop_periodic_flush_mock.assert_not_called()
     start_periodic_flush_mock.assert_not_called()
 
+
 @pytest.mark.parametrize("interval", [0, -1, -100, "invalid", None])
-def test_appriser_flush_interval_setter_invalid(mocker: pytest_mock.MockerFixture, interval: int | float | str | None):
+def test_appriser_flush_interval_setter_invalid(mocker: pytest_mock.MockerFixture, interval: float | str | None):
     """Test setting an invalid flush interval."""
     appriser = Appriser()
     stop_periodic_flush_mock = mocker.patch.object(appriser, "stop_periodic_flush")

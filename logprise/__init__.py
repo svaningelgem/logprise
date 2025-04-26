@@ -5,7 +5,6 @@ import functools
 import logging
 import sys
 import threading
-from dataclasses import InitVar, dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 
@@ -71,13 +70,15 @@ class InterceptHandler(logging.Handler):
         logger_opt.log(level, record.getMessage())
 
 
-_accumulator_id: int | None = None
 _old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]] = loguru._Logger.remove
 
 
 # Custom Appriser class to manage notifications
 class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
+
+    _accumulator_id: ClassVar[int | None] = None
+
     def __init__(
         self,
         *,
@@ -108,12 +109,11 @@ class Appriser:
         def _new_remove(*args: object, **kwargs: object) -> None:
             _old_logger_remove(*args, **kwargs)
 
-            global _accumulator_id
-            if _accumulator_id not in logger._core.handlers:
-                _accumulator_id = logger.add(self.accumulate_log, catch=False)
+            if Appriser._accumulator_id not in logger._core.handlers:
+                Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
 
         loguru._Logger.remove = _new_remove
-        _accumulator_id = logger.add(self.accumulate_log, catch=False)
+        Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
 
     def _setup_at_exit_cleanup(self) -> None:
         atexit.register(self.cleanup)
