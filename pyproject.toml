@@ -14,7 +14,7 @@ packages = [
 python = ">=3.10"
 loguru = "*"
 apprise = "*"
-urllib3 = "<2"  # Because else poetry won't work anymore!
+urllib3 = "<3"  # Because else poetry won't work anymore!
 
 [tool.poetry.group.dev.dependencies]
 pytest-cov = "*"
