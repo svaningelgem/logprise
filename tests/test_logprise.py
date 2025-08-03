@@ -320,3 +320,26 @@ def test_intercepted_logger_doesnt_output_its_messages(capsys) -> None:
     assert len(appriser.buffer) == 1
     assert appriser.buffer[0].record["message"] == test_message
     assert appriser.buffer[0].record["level"].name == "ERROR"
+
+
+def test_intercepted_logger_has_streamhandler(capsys) -> None:
+    """Test that standard logging messages do NOT get outputed in the console"""
+
+    # Configure standard logging to use our handler -- this will set up a chain
+    _log = logging.getLogger("test")
+    _log.addHandler(StreamHandler())
+
+    # Create an Appriser to capture the logs
+    appriser = Appriser()
+
+    # Log using standard logging
+    test_message = "Test log message"
+    _log.error(test_message)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+    # Verify the message was captured by our appriser
+    assert len(appriser.buffer) == 1
+    assert appriser.buffer[0].record["message"] == test_message
+    assert appriser.buffer[0].record["level"].name == "ERROR"

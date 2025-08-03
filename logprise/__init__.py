@@ -5,6 +5,7 @@ import functools
 import logging
 import sys
 import threading
+from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final
 
@@ -143,6 +144,9 @@ class Appriser:
             if not getattr(self, "_has_been_handled_by_interceptor", False):
                 if not any(isinstance(h, InterceptHandler) for h in self.handlers):
                     self.addHandler(InterceptHandler())
+                for handler in self.handlers.copy():
+                    if isinstance(handler, StreamHandler):
+                        self.removeHandler(handler)
                 self.propagate = False
                 self._added_intercept_handler = True
 
