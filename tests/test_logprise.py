@@ -1,15 +1,12 @@
-import contextlib
 import logging
 import re
-import time
-from io import StringIO
-from logging import StreamHandler, NullHandler
+from logging import NullHandler, StreamHandler
 
 import pytest
 from apprise import NotifyFormat, NotifyType
 from loguru import logger
 
-from logprise import Appriser, InterceptHandler
+from logprise import Appriser
 
 
 def test_intercept_handler_forwards_to_loguru():
@@ -294,7 +291,6 @@ def test_notification_parameter_types(mocker, noop, notify_type_param, notify_fo
     )
 
     assert len(appriser.buffer) == 0
-
 
 
 def test_intercepted_logger_doesnt_output_its_messages(capsys) -> None:

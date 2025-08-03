@@ -136,7 +136,7 @@ class Appriser:
         original_method = logging.Logger._log
 
         # Check if already intercepted by our method
-        if hasattr(original_method, '_intercepted_by_logprise'):
+        if hasattr(original_method, "_intercepted_by_logprise"):
             return
 
         @functools.wraps(original_method)
