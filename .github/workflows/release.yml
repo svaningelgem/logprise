@@ -55,7 +55,7 @@ jobs:
         if: always()
         env:
           PYTHONPATH: "."
-        run: poetry run stubtest logprise
+        run: poetry run stubtest ${{ github.event.repository.name }}
 
       - name: Running mypy
         if: always()
@@ -65,7 +65,7 @@ jobs:
 
       - name: Run tests with coverage
         if: always()
-        run: poetry run pytest --cov=logprise --cov-report=xml
+        run: poetry run pytest --cov=${{ github.event.repository.name }} --cov-report=xml
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v5
