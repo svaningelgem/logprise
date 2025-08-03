@@ -132,6 +132,26 @@ class Appriser:
     def _setup_interception_handler(self) -> None:
         logging.basicConfig(handlers=[InterceptHandler()], level=self._notification_level, force=True)
 
+        original_method = logging.Logger._log
+
+        # Check if already intercepted by our method
+        if hasattr(original_method, '_intercepted_by_logprise'):
+            return
+
+        @functools.wraps(original_method)
+        def new_log_method(self: logging.Logger, *args: object, **kwargs: object) -> None:
+            if not getattr(self, "_has_been_handled_by_interceptor", False):
+                if not any(isinstance(h, InterceptHandler) for h in self.handlers):
+                    self.addHandler(InterceptHandler())
+                self.propagate = False
+                self._added_intercept_handler = True
+
+            return original_method(self, *args, **kwargs)
+
+        # Mark our wrapper with a custom attribute
+        new_log_method._intercepted_by_logprise = True
+        logging.Logger._log = new_log_method
+
     def _setup_exception_hook(self) -> None:
         """Set up a hook to capture uncaught exceptions."""
         original_excepthook = sys.excepthook
