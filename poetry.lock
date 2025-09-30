@@ -2,14 +2,14 @@
 
 [[package]]
 name = "apprise"
-version = "1.9.4"
+version = "1.9.5"
 description = "Push Notifications that work with just about every platform!"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "apprise-1.9.4-py3-none-any.whl", hash = "sha256:17dca8ad0a5b2063f6bae707979a51ca2cb374fcc66b0dd5c05a9d286dd40069"},
-    {file = "apprise-1.9.4.tar.gz", hash = "sha256:483122aee19a89a7b075ecd48ef11ae37d79744f7aeb450bcf985a9a6c28c988"},
+    {file = "apprise-1.9.5-py3-none-any.whl", hash = "sha256:1873a8a1b8cf9e44fcbefe0486ed260b590652aea12427f545b37c8566142961"},
+    {file = "apprise-1.9.5.tar.gz", hash = "sha256:8f3be318bb429c2017470e33928a2e313cbf7600fc74b8184782a37060db366a"},
 ]
 
 [package.dependencies]
@@ -19,11 +19,12 @@ markdown = "*"
 PyYAML = "*"
 requests = "*"
 requests-oauthlib = "*"
+tzdata = {version = "*", markers = "platform_system == \"Windows\""}
 
 [package.extras]
 all-plugins = ["PGPy", "cryptography", "gntp", "paho-mqtt (!=2.0.*)", "smpplib"]
 dev = ["babel", "coverage", "mock", "pytest", "pytest-cov", "pytest-mock", "ruff", "tox", "validate-pyproject"]
-windows = ["pywin32"]
+windows = ["pywin32", "tzdata"]
 
 [[package]]
 name = "certifi"
@@ -745,6 +746,19 @@ groups = ["dev"]
 files = [
     {file = "typing_extensions-4.14.1-py3-none-any.whl", hash = "sha256:d1e1e3b58374dc93031d6eda2420a48ea44a36c2b4766a4fdeb3710755731d76"},
     {file = "typing_extensions-4.14.1.tar.gz", hash = "sha256:38b39f4aeeab64884ce9f74c94263ef78f3c22467c8724005483154c26648d36"},
+]
+
+[[package]]
+name = "tzdata"
+version = "2025.2"
+description = "Provider of IANA time zone data"
+optional = false
+python-versions = ">=2"
+groups = ["main"]
+markers = "platform_system == \"Windows\""
+files = [
+    {file = "tzdata-2025.2-py2.py3-none-any.whl", hash = "sha256:1a403fada01ff9221ca8044d701868fa132215d84beb92242d9acd2147f667a8"},
+    {file = "tzdata-2025.2.tar.gz", hash = "sha256:b60a638fcc0daffadf82fe0f57e53d06bdec2f36c4df66280ae79bce6bd6f2b9"},
 ]
 
 [[package]]
