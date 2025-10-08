@@ -1,16 +1,21 @@
 # Logprise
 
-Logprise is a Python package that seamlessly integrates [loguru](https://github.com/Delgan/loguru/) and [apprise](https://github.com/caronc/apprise) to provide unified logging and notification capabilities. It allows you to automatically send notifications when specific log levels are triggered, making it perfect for monitoring applications and getting alerts when important events occur.
+Logprise provides a one-stop logger for your Python application by integrating [loguru](https://github.com/Delgan/loguru/) and [apprise](https://github.com/caronc/apprise). It intercepts all standard `logging` calls and routes them through a unified interface. Above a configurable threshold, errors are automatically sent as alerts via Slack, Discord, email, or 100+ other services - no code changes needed.
 
-## Features
+## Why Logprise?
 
-- Unified logging interface that captures both standard logging and loguru logs
-- Automatic notification delivery based on configurable log levels
-- Batched notifications to prevent notification spam
-- Flexible configuration through apprises extensive notification service support
-- Periodic flushing of log messages at configurable intervals
-- Automatic capture of uncaught exceptions
-- Easy integration with existing Python applications
+Your script crashes at 3 AM. You want to know about it immediately, not when you check logs tomorrow. Logprise automatically captures errors and sends them to your notification service of choice.
+
+**Works with your existing code:** Logprise intercepts standard Python `logging` calls and redirects them through loguru. No need to refactor your codebase or update third-party libraries.
+
+```python
+from logprise import logger
+import logging
+
+logger.error("Payment processing failed")  # You get notified
+logging.error("Database connection lost")  # Also notified (auto-intercepted)
+logger.warning("High memory usage")        # Silent (unless configured)
+```
 
 ## Installation
 
@@ -18,138 +23,189 @@ Logprise is a Python package that seamlessly integrates [loguru](https://github.
 pip install logprise
 ```
 
-Or if you're using Poetry:
-
-```bash
-poetry add logprise
-```
-
 ## Quick Start
 
-Here's a simple example of how to use Logprise:
+**Step 1:** Configure notification service (create `~/.apprise` file):
+
+```text
+mailto://user:pass@gmail.com
+```
+
+**Step 2:** Use it in your code:
 
 ```python
 from logprise import logger
 
-# Your logs will automatically trigger notifications
-logger.info("This won't trigger a notification")
-logger.warning("This won't trigger a notification")
-logger.error("This will trigger a notification")  # Default is ERROR level
-
-# Notifications are automatically sent when your program exits
-# or periodically according to the flush interval
+logger.info("Script started")
+logger.error("This triggers a notification")  # Sent when program exits or after 1 hour
 ```
+
+That's it. Errors automatically trigger notifications. No configuration needed beyond setting up your notification service.
 
 ## Configuration
 
 ### Notification Services
 
-Logprise uses Apprise for notifications, which supports a wide range of notification services. You can configure these in two ways:
-
-#### 1. Configuration File
-
-Create an `.apprise` file in one of the default configuration paths:
-
-- `~/.apprise` \[or `%APPDATA%/Apprise/apprise`]
-- `~/.config/apprise` \[or `%LOCALAPPDATA%/Apprise/apprise`]
-- '/etc/apprise' \[or `%ALLUSERSPROFILE%/Apprise/apprise`]
-
-*For more possible configuration file locations, please check: `DEFAULT_CONFIG_PATHS` in [apprises source code](https://github.com/caronc/apprise/blob/master/apprise/cli.py).*
-
-Example configuration:
+Apprise supports 100+ services. Configure them in `~/.apprise` (or other [standard locations](https://github.com/caronc/apprise/blob/master/apprise/cli.py)):
 
 ```text
+# Email
 mailto://user:pass@gmail.com
-tgram://bot_token/chat_id
+
+# Slack
 slack://tokenA/tokenB/tokenC/#channel
+
+# Discord
+discord://webhook_id/webhook_token
+
+# Telegram
+tgram://bot_token/chat_id
 ```
 
-#### 2. Programmatically Add Services
+See [Apprise's service list](https://github.com/caronc/apprise/wiki) for all options.
 
-You can easily add more notification services programmatically:
+You can also add services programmatically:
 
 ```python
 from logprise import appriser
 
-# Add a single URL
 appriser.add("mailto://user:pass@gmail.com")
-
-# Add multiple URLs
-appriser.add(["tgram://bot_token/chat_id", "slack://tokenA/tokenB/tokenC/#channel"])
-
-# Add URLs with tags
-appriser.add("discord://webhook_id/webhook_token", tag=["critical"])
+appriser.add(["slack://token/...", "discord://webhook/..."])
 ```
 
-See [Apprise's configuration guide](https://github.com/caronc/apprise/wiki/config#cli) for the full list of supported services and their configuration.
+### Notification Level
 
-### Notification Levels
-
-You can set the minimum log level that triggers notifications:
-
-```python
-from logprise import appriser, logger
-
-# Using string level names
-appriser.notification_level = "WARNING"  # or "DEBUG", "INFO", "ERROR", "CRITICAL"
-
-# Using integer level numbers
-appriser.notification_level = 30  # WARNING level
-
-# Using loguru Level objects
-appriser.notification_level = logger.level("ERROR")
-```
-
-### Controlling Notification Timing
-
-Logprise offers several ways to control when notifications are sent:
+Control which log levels trigger notifications:
 
 ```python
 from logprise import appriser
 
-# Set the flush interval for periodic notifications (in seconds)
-appriser.flush_interval = 3600  # Default is hourly
+appriser.notification_level = "WARNING"  # Notify on WARNING and above
+appriser.notification_level = "CRITICAL" # Only critical issues
+appriser.notification_level = 30         # Numeric levels work too
+```
 
-# Manually send notifications immediately
+Default is ERROR (30).
+
+### Timing Control
+
+Notifications batch to prevent spam. Control when they're sent:
+
+```python
+from logprise import appriser
+
+# Change flush interval (default: 3600 seconds)
+appriser.flush_interval = 1800  # Send every 30 minutes
+
+# Send immediately
 appriser.send_notification()
 
-# Clear the notification buffer
+# Clear pending notifications without sending
 appriser.buffer.clear()
-
-# Stop the periodic flush thread
-appriser.stop_periodic_flush()
-
-# Manually cleanup and flush pending notifications
-appriser.cleanup()
 ```
 
-## Handling Uncaught Exceptions
+Notifications automatically flush when your program exits.
 
-Logprise automatically captures uncaught exceptions and sends notifications. This helps you detect and respond to unexpected application failures:
+## Use Cases
 
+**Long-running scripts:**
 ```python
-# This will be logged and trigger a notification
-raise ValueError("Something went wrong")
+from logprise import logger
+
+for item in large_dataset:
+    try:
+        process(item)
+    except Exception as e:
+        logger.error(f"Failed processing {item}: {e}")
+        # Notification sent, script continues
+```
+
+**Scheduled jobs:**
+```python
+from logprise import logger, appriser
+
+appriser.notification_level = "INFO"  # Get notified of completion too
+
+def daily_backup():
+    logger.info("Backup started")
+    # ... backup logic ...
+    logger.info("Backup completed")
+```
+
+**Monitoring critical sections:**
+```python
+from logprise import logger
+
+if disk_usage > 90:
+    logger.critical(f"Disk usage at {disk_usage}%")
+    # Immediate notification on program exit
+```
+
+**Works with third-party libraries:**
+```python
+from logprise import logger
+import requests
+import logging
+
+# Third-party libraries using standard logging are automatically captured
+response = requests.get("https://api.example.com")
+# If requests logs an error, you'll be notified
+
+# Your existing logging code works too
+logging.error("Custom error from standard logging")
+logger.error("Error from loguru")
+# Both trigger notifications
+```
+
+## How It Works
+
+1. **Automatic interception:** Logprise intercepts both loguru and standard library `logging`, redirecting all logs through a unified interface
+2. **Smart batching:** Messages accumulate until flush interval or program exit
+3. **Exception capture:** Uncaught exceptions are logged and trigger immediate notification
+4. **Multiple services:** Send to multiple notification services simultaneously
+
+This means third-party libraries using standard `logging` will also trigger notifications when they log errors.
+
+## Advanced Features
+
+**Prevent handler removal:**
+```python
+from logprise import logger
+
+logger.remove()  # Logprise handler persists automatically
+```
+
+**Tagging for routing:**
+```python
+from logprise import appriser
+
+appriser.add("discord://webhook/...", tag=["critical"])
+appriser.add("mailto://...", tag=["all"])
+```
+
+**Custom notification format:**
+```python
+from logprise import appriser
+from apprise import NotifyType, NotifyFormat
+
+appriser.send_notification(
+    title="Production Alert",
+    notify_type=NotifyType.FAILURE,
+    body_format=NotifyFormat.MARKDOWN
+)
 ```
 
 ## Contributing
 
-To contribute to the project:
-
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/logprise.git
+git clone https://github.com/svaningelgem/logprise.git
 cd logprise
-
-# Install dependencies
 poetry install
-
-# Run tests
 poetry run pytest
 ```
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome via pull requests.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details.
