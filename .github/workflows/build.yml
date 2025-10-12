@@ -1,4 +1,6 @@
 name: Build and Test
+permissions:
+  contents: read
 
 on:
   push:
@@ -8,7 +10,45 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: 'poetry'
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run ruff format check
+        run: poetry run ruff format --check --diff .
+
+      - name: Run ruff lint check
+        run: poetry run ruff check --diff .
+
+      - name: Run consistency checks between stub & module
+        env:
+          PYTHONPATH: "."
+        run: poetry run stubtest logprise
+
+      - name: Running mypy
+        env:
+          PYTHONPATH: "."
+        run: poetry run mypy .
+
   test:
+    needs: lint
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -33,28 +73,7 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
-      - name: Run ruff format check
-        if: always()
-        run: poetry run ruff format --check --diff .
-
-      - name: Run ruff lint check
-        if: always()
-        run: poetry run ruff check --diff .
-
-      - name: Run consistency checks between stub & module
-        if: always()
-        env:
-          PYTHONPATH: "."
-        run: poetry run stubtest logprise
-
-      - name: Running mypy
-        if: always()
-        env:
-          PYTHONPATH: "."
-        run: poetry run mypy .
-
       - name: Run tests with coverage
-        if: always()
         run: poetry run pytest --cov=logprise --cov-report=xml
 
       - name: Upload coverage report

@@ -1,39 +1,49 @@
 import sys
 import threading
 import time
+from threading import ExceptHookArgs
 from unittest.mock import MagicMock
+
+from conftest import NoOpNotifier
 
 from logprise import Appriser, logger
 
 
-def test_uncaught_exception_hook(notify_mock, monkeypatch):
+def test_uncaught_exception_hook(apprise_noop, monkeypatch):
     """Test that uncaught exceptions trigger immediate notifications."""
-    # Save original excepthook
-    original_excepthook = sys.excepthook
-
-    # Create an Appriser instance
-    appriser = Appriser()
+    appriser, _noop = apprise_noop
 
     # Mock send_notification to track calls
     mock_send = MagicMock()
     monkeypatch.setattr(appriser, "send_notification", mock_send)
 
     # Simulate an uncaught exception
-    try:
-        # Trigger our custom excepthook
-        sys.excepthook(ValueError, ValueError("Test exception"), None)
-    finally:
-        # Restore original excepthook
-        sys.excepthook = original_excepthook
+    sys.excepthook(ValueError, ValueError("Test exception"), None)
 
     # Verify send_notification was called
     mock_send.assert_called_once()
 
 
-def test_periodic_flush(notify_mock, monkeypatch):
+def test_uncaught_threading_exception_hook(apprise_noop, monkeypatch):
+    """Test that uncaught exceptions trigger immediate notifications."""
+    # Save original excepthook
+    appriser, _noop = apprise_noop
+
+    # Mock send_notification to track calls
+    mock_send = MagicMock()
+    monkeypatch.setattr(appriser, "send_notification", mock_send)
+
+    # Simulate an uncaught exception
+    threading.excepthook(ExceptHookArgs((ValueError, ValueError("Test exception"), None, None)))
+
+    # Verify send_notification was called
+    mock_send.assert_called_once()
+
+
+def test_periodic_flush(apprise_noop, monkeypatch):
     """Test that logs are periodically flushed."""
     # Create an Appriser with a short flush interval for testing
-    appriser = Appriser()
+    appriser, _noop = apprise_noop
     appriser.flush_interval = 0.1  # 100ms for faster testing
 
     # Mock threading.Thread to control execution
@@ -51,10 +61,11 @@ def test_periodic_flush(notify_mock, monkeypatch):
     mock_thread.return_value.start.assert_called_once()
 
 
-def test_periodic_flush_integration(notify_mock, noop):
+def test_periodic_flush_integration():
     """Test the periodic flush actually works (integration test)."""
     # Create an Appriser with a short flush interval
     appriser = Appriser(flush_interval=0.2)
+    noop = NoOpNotifier()
     appriser.add(noop)
 
     # Generate an error log (should be captured)
@@ -68,8 +79,8 @@ def test_periodic_flush_integration(notify_mock, noop):
 
     # Buffer should be cleared and notification sent
     assert len(appriser.buffer) == 0
-    assert len(notify_mock) == 1
-    assert "Test periodic flush" in notify_mock[0]["body"]
+    assert len(noop.calls) == 1
+    assert "Test periodic flush" in noop.calls[0]["body"]
 
 
 def test_stop_periodic_flush():
@@ -95,10 +106,9 @@ def test_stop_periodic_flush():
     mock_thread.join.assert_not_called()
 
 
-def test_cleanup_method(notify_mock, noop):
+def test_periodic_flush_should_stop_on_cleanup(apprise_noop):
     """Test that cleanup method stops the flush thread and sends pending notifications."""
-    appriser = Appriser()
-    appriser.add(noop)
+    appriser, noop = apprise_noop
 
     # Mock stop_periodic_flush
     mock_stop = MagicMock()
@@ -114,14 +124,14 @@ def test_cleanup_method(notify_mock, noop):
     mock_stop.assert_called_once()
 
     # Verify notification was sent
-    assert len(notify_mock) == 1
-    assert "Test cleanup" in notify_mock[0]["body"]
+    assert len(noop.calls) == 1
+    assert "Test cleanup" in noop.calls[0]["body"]
     assert len(appriser.buffer) == 0
 
 
-def test_flush_only_if_buffer_has_content(notify_mock, monkeypatch):
+def test_flush_only_if_buffer_has_content(apprise_noop, monkeypatch):
     """Test that periodic flush only sends notifications if buffer has content."""
-    appriser = Appriser()
+    appriser, _noop = apprise_noop
 
     # Empty the buffer
     appriser.buffer.clear()

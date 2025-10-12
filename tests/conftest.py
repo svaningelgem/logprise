@@ -1,9 +1,12 @@
+import sys
+import threading
+from collections.abc import Generator
 from typing import Any
 
 import pytest
-from apprise import Apprise, NotifyBase, NotifyType
+from apprise import NotifyBase, NotifyType
 
-import logprise
+from logprise import Appriser, logger
 
 
 class NoOpNotifier(NotifyBase):
@@ -15,37 +18,55 @@ class NoOpNotifier(NotifyBase):
     # Define protocol(s) this notification supports
     protocol = ("noop", "dummy")
 
+    calls: list[dict]
+
     def __init__(self, **kwargs):
         super().__init__(secure=False, **kwargs)
+        self.calls = []
 
     def url(self, privacy: bool = False, *args: Any, **kwargs: Any) -> str:
         return "noop://"
 
     def send(self, body: str, title: str = "", notify_type: NotifyType = NotifyType.INFO, **kwargs: Any) -> bool:
         # Simply return True to simulate successful notification
+        self.calls.append({"title": title, "body": body})
         return True
 
 
-@pytest.fixture()
-def noop() -> NoOpNotifier:
-    return NoOpNotifier()
+@pytest.fixture
+def apprise_noop() -> Generator[tuple[Appriser, NoOpNotifier], Any, None]:
+    a = Appriser()
+    noop = NoOpNotifier()
+    a.add(noop)
+    try:
+        yield a, noop
+    finally:
+        a.cleanup()
 
 
 @pytest.fixture(autouse=True)
-def notify_mock(monkeypatch):
-    """Only mock the notify method of Apprise"""
-    calls = []
+def reset_appriser_object() -> Generator[None, None, None]:
+    try:
+        yield
+    finally:
+        Appriser._exit_via_unhandled_exception = False
 
-    def mock_notify(self, title, body, *_, **__):
-        calls.append({"title": title, "body": body})
-        return True
 
-    monkeypatch.setattr(Apprise, "notify", mock_notify)
-    return calls
+@pytest.fixture(autouse=True)
+def save_restore_excepthooks() -> Generator[None, None, None]:
+    original_excepthook = sys.excepthook
+    original_threading_excepthook = threading.excepthook
+    try:
+        yield
+    finally:
+        sys.excepthook = original_excepthook
+        threading.excepthook = original_threading_excepthook
 
 
 @pytest.fixture(autouse=True)
 def silence_logger():
-    logprise.logger.remove()  # Silence any output
-    yield
-    logprise.logger.remove()  # And restore any handlers we added
+    logger.remove()  # Silence any output
+    try:
+        yield
+    finally:
+        logger.remove()  # And restore any handlers we added
