@@ -1,5 +1,7 @@
+import sys
+import threading
 from collections.abc import Generator
-from typing import Any
+from typing import Any, Generator
 
 import pytest
 from apprise import NotifyBase, NotifyType
@@ -31,12 +33,17 @@ class NoOpNotifier(NotifyBase):
         return True
 
 
+
+
 @pytest.fixture
-def apprise_noop() -> tuple[Appriser, NoOpNotifier]:
+def apprise_noop() -> Generator[tuple[Appriser, NoOpNotifier], Any, None]:
     a = Appriser()
     noop = NoOpNotifier()
     a.add(noop)
-    return a, noop
+    try:
+        yield a, noop
+    finally:
+        a.cleanup()
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +52,17 @@ def reset_appriser_object() -> Generator[None, None, None]:
         yield
     finally:
         Appriser._exit_via_unhandled_exception = False
+
+
+@pytest.fixture(autouse=True)
+def save_restore_excepthooks() -> Generator[None, None, None]:
+    original_excepthook = sys.excepthook
+    original_threading_excepthook = threading.excepthook
+    try:
+        yield
+    finally:
+        sys.excepthook = original_excepthook
+        threading.excepthook = original_threading_excepthook
 
 
 @pytest.fixture(autouse=True)

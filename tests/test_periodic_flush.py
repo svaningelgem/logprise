@@ -6,13 +6,11 @@ from unittest.mock import MagicMock
 from conftest import NoOpNotifier
 
 from logprise import Appriser, logger
+from threading import ExceptHookArgs
 
 
 def test_uncaught_exception_hook(apprise_noop, monkeypatch):
     """Test that uncaught exceptions trigger immediate notifications."""
-    # Save original excepthook
-    original_excepthook = sys.excepthook
-
     appriser, _noop = apprise_noop
 
     # Mock send_notification to track calls
@@ -20,12 +18,23 @@ def test_uncaught_exception_hook(apprise_noop, monkeypatch):
     monkeypatch.setattr(appriser, "send_notification", mock_send)
 
     # Simulate an uncaught exception
-    try:
-        # Trigger our custom excepthook
-        sys.excepthook(ValueError, ValueError("Test exception"), None)
-    finally:
-        # Restore original excepthook
-        sys.excepthook = original_excepthook
+    sys.excepthook(ValueError, ValueError("Test exception"), None)
+
+    # Verify send_notification was called
+    mock_send.assert_called_once()
+
+
+def test_uncaught_threading_exception_hook(apprise_noop, monkeypatch):
+    """Test that uncaught exceptions trigger immediate notifications."""
+    # Save original excepthook
+    appriser, _noop = apprise_noop
+
+    # Mock send_notification to track calls
+    mock_send = MagicMock()
+    monkeypatch.setattr(appriser, "send_notification", mock_send)
+
+    # Simulate an uncaught exception
+    threading.excepthook(ExceptHookArgs((ValueError, ValueError("Test exception"), None, None)))
 
     # Verify send_notification was called
     mock_send.assert_called_once()

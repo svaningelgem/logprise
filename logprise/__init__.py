@@ -84,6 +84,8 @@ class Appriser:
 
     _accumulator_id: ClassVar[int | None] = None
     _exit_via_unhandled_exception: ClassVar[bool] = False
+    _original_excepthook: Callable[[type[BaseException], BaseException, types.TracebackType | None], None] = None
+    _original_threading_excepthook: Callable[[threading.ExceptHookArgs], None] = None
 
     def __init__(
         self,
@@ -164,12 +166,13 @@ class Appriser:
 
     def _setup_sys_exception_hook(self) -> None:
         """Set up a hook to capture uncaught exceptions."""
-        hook = sys.excepthook
+        self._original_excepthook = hook = sys.excepthook
 
         # We want the original one, not go through multiple Appriser objects!
         while (
             isinstance(hook, partial)
             and hook.func.__name__ == self._handle_uncaught_sys_exception.__name__
+            and isinstance(hook.keywords, dict)
             and "original_excepthook" in hook.keywords
         ):
             hook = hook.keywords["original_excepthook"]
@@ -178,12 +181,13 @@ class Appriser:
 
     def _setup_threading_exception_hook(self) -> None:
         """Set up a hook to capture uncaught exceptions."""
-        hook = threading.excepthook
+        self._original_threading_excepthook = hook = threading.excepthook
 
         # We want the original one, not go through multiple Appriser objects!
         while (
             isinstance(hook, partial)
             and hook.func.__name__ == self._handle_uncaught_threading_exception.__name__
+            and isinstance(hook.keywords, dict)
             and "original_excepthook" in hook.keywords
         ):
             hook = hook.keywords["original_excepthook"]
@@ -326,6 +330,9 @@ class Appriser:
 
         if not Appriser._exit_via_unhandled_exception:
             self.send_notification()
+
+        sys.excepthook = self._original_excepthook
+        threading.excepthook = self._original_threading_excepthook
 
     @property
     def notification_level(self) -> int:
