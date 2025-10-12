@@ -83,3 +83,12 @@ def test_uncaught_threading_exception_hook_with_default_existing_hook(mocker):
 
     # Verify send_notification was called
     mock_send.assert_called_once()
+
+
+def test_multiple_apprise_objects_with_non_default_existing_hook(mocker):
+    """Test that uncaught exceptions trigger immediate notifications."""
+    mock_send = mocker.patch.object(Apprise, "notify", side_effect=Exception)
+    _1 = Appriser()
+    _2 = Appriser()
+    sys.excepthook(ValueError, ValueError("Test exception"), None)
+    mock_send.assert_called_once()
