@@ -1,7 +1,7 @@
 import sys
 import threading
 from collections.abc import Generator
-from typing import Any, Generator
+from typing import Any
 
 import pytest
 from apprise import NotifyBase, NotifyType
@@ -31,8 +31,6 @@ class NoOpNotifier(NotifyBase):
         # Simply return True to simulate successful notification
         self.calls.append({"title": title, "body": body})
         return True
-
-
 
 
 @pytest.fixture

@@ -1,12 +1,12 @@
 import sys
 import threading
 import time
+from threading import ExceptHookArgs
 from unittest.mock import MagicMock
 
 from conftest import NoOpNotifier
 
 from logprise import Appriser, logger
-from threading import ExceptHookArgs
 
 
 def test_uncaught_exception_hook(apprise_noop, monkeypatch):

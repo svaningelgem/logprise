@@ -1,6 +1,7 @@
 import sys
 import threading
 from threading import ExceptHookArgs
+
 from apprise import Apprise
 
 from logprise import Appriser
