@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import atexit
 import functools
+import inspect
 import logging
 import sys
+import sysconfig
 import threading
+from functools import partial
 from logging import StreamHandler
 from pathlib import Path
+from threading import get_ident
 from typing import TYPE_CHECKING, ClassVar, Final
 
 import apprise.cli
@@ -79,6 +83,7 @@ class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
 
     _accumulator_id: ClassVar[int | None] = None
+    _exit_via_unhandled_exception: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -104,7 +109,8 @@ class Appriser:
         # Initialize everything
         self._load_default_config_paths()
         self._setup_interception_handler()
-        self._setup_exception_hook()
+        self._setup_sys_exception_hook()
+        self._setup_threading_exception_hook()
         self._start_periodic_flush()
         self._setup_at_exit_cleanup()
         self._setup_removal_prevention()
@@ -156,23 +162,108 @@ class Appriser:
         new_log_method._intercepted_by_logprise = True
         logging.Logger._log = new_log_method
 
-    def _setup_exception_hook(self) -> None:
+    def _setup_sys_exception_hook(self) -> None:
         """Set up a hook to capture uncaught exceptions."""
-        original_excepthook = sys.excepthook
+        hook = sys.excepthook
 
-        def uncaught_exception(
-            exc_type: type[BaseException], exc_value: BaseException, exc_traceback: types.TracebackType | None
-        ) -> None:
-            # Log the exception
-            logger.opt(exception=(exc_type, exc_value, exc_traceback)).error(
-                f"Uncaught exception: {exc_type.__name__}: {exc_value}"
-            )
-            # Force send the notification immediately for uncaught exceptions
-            self.send_notification()
-            # Call the original excepthook
+        # We want the original one, not go through multiple Appriser objects!
+        while (
+            isinstance(hook, partial)
+            and hook.func.__name__ == self._handle_uncaught_sys_exception.__name__
+            and "original_excepthook" in hook.keywords
+        ):
+            hook = hook.keywords["original_excepthook"]
+
+        sys.excepthook = partial(self._handle_uncaught_sys_exception, original_excepthook=hook)
+
+    def _setup_threading_exception_hook(self) -> None:
+        """Set up a hook to capture uncaught exceptions."""
+        hook = threading.excepthook
+
+        # We want the original one, not go through multiple Appriser objects!
+        while (
+            isinstance(hook, partial)
+            and hook.func.__name__ == self._handle_uncaught_threading_exception.__name__
+            and "original_excepthook" in hook.keywords
+        ):
+            hook = hook.keywords["original_excepthook"]
+
+        threading.excepthook = partial(self._handle_uncaught_threading_exception, original_excepthook=hook)
+
+    _STDLIB_BACKPORTS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "exceptiongroup",  # stdlib in 3.11+
+            "importlib_metadata",  # stdlib in 3.8+
+            "importlib_resources",  # stdlib in 3.9+
+            "typing_extensions",  # backport of typing features
+            "tomli",  # tomllib in 3.11+
+        }
+    )
+
+    @staticmethod
+    def _is_method_in_stdlib(method: Callable) -> bool:
+        module = inspect.getmodule(method)
+        if not module:
+            return False
+
+        top_level = method.__module__.split(".", maxsplit=1)[0]
+
+        if top_level in sys.stdlib_module_names or top_level in Appriser._STDLIB_BACKPORTS:
+            return True
+
+        if not hasattr(module, "__file__") or not module.__file__:
+            return True
+
+        module_path = Path(module.__file__).resolve().absolute()
+
+        if "site-packages" in module_path.parts or "dist-packages" in module_path.parts:
+            return False
+
+        all_paths = sysconfig.get_paths()
+        for check_this in ["stdlib", "platstdlib"]:
+            path = Path(all_paths[check_this]).resolve().absolute()
+            if module_path.is_relative_to(path):
+                return True
+
+        return False
+
+    def _handle_uncaught_sys_exception(
+        self,
+        exc_type: type[BaseException],
+        exc_value: BaseException,
+        exc_traceback: types.TracebackType | None,
+        original_excepthook: Callable[[type[BaseException], BaseException, types.TracebackType | None], None],
+    ) -> None:
+        """Handle uncaught exceptions by logging and sending notifications."""
+        logger.opt(exception=(exc_type, exc_value, exc_traceback)).error(
+            f"Uncaught exception: {exc_type.__name__}: {exc_value}"
+        )
+
+        Appriser._exit_via_unhandled_exception = True
+
+        self.send_notification()
+
+        if not self._is_method_in_stdlib(original_excepthook):
             original_excepthook(exc_type, exc_value, exc_traceback)
 
-        sys.excepthook = uncaught_exception
+    def _handle_uncaught_threading_exception(
+        self,
+        args: threading.ExceptHookArgs,
+        /,
+        original_excepthook: Callable[[threading.ExceptHookArgs], None],
+    ) -> None:
+        """Handle uncaught exceptions by logging and sending notifications."""
+        logger.opt(exception=(args.exc_type, args.exc_value, args.exc_traceback)).error(
+            f"Uncaught exception in thread {args.thread.name if args.thread else get_ident()}:"
+            f" {args.exc_type.__name__}: {args.exc_value}"
+        )
+
+        Appriser._exit_via_unhandled_exception = True
+
+        self.send_notification()
+
+        if not self._is_method_in_stdlib(original_excepthook):
+            original_excepthook(args)
 
     @property
     def flush_interval(self) -> int | float:
@@ -232,7 +323,9 @@ class Appriser:
     def cleanup(self) -> None:
         """Clean up resources and send any pending notifications."""
         self.stop_periodic_flush()
-        self.send_notification()
+
+        if not Appriser._exit_via_unhandled_exception:
+            self.send_notification()
 
     @property
     def notification_level(self) -> int:
@@ -263,15 +356,19 @@ class Appriser:
     ) -> None:
         """Send a single notification with all accumulated logs."""
         if not self.buffer:
+            logger.debug("No logs to send")
             return
 
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
 
-        if self.apprise_obj and self.apprise_obj.notify(
-            title=title, notify_type=notify_type, body=message, body_format=body_format
-        ):
-            self.buffer.clear()  # Clear the buffer after sending
+        try:
+            if message and self.apprise_obj.notify(
+                title=title, notify_type=notify_type, body=message, body_format=body_format
+            ):
+                self.buffer.clear()  # Clear the buffer after sending
+        except BaseException as e:
+            logger.warning(f"Failed to send notification: {e}")
 
 
 appriser = Appriser()

@@ -45,10 +45,9 @@ def test_appriser_notification_levels():
     assert all(message.record["level"].no >= logger.level("WARNING").no for message in appriser.buffer)
 
 
-def test_send_notification(notify_mock, noop):
+def test_send_notification(apprise_noop):
     """Test the complete flow from logging to notification"""
-    appriser = Appriser()
-    appriser.add(noop)
+    appriser, noop = apprise_noop
 
     # Generate some logs
     logger.error("Database connection failed")
@@ -58,8 +57,8 @@ def test_send_notification(notify_mock, noop):
     appriser.send_notification()
 
     # Verify notification content
-    assert len(notify_mock) == 1
-    notification = notify_mock[0]
+    assert len(noop.calls) == 1
+    notification = noop.calls[0]
     assert notification["title"] == "Script Notifications"
     assert re.search(
         " \| ERROR    \| test_logprise:test_send_notification:\d+ - Database connection failed", notification["body"]
@@ -103,10 +102,9 @@ def test_config_file_loading(tmp_path, mocker):
     assert len(appriser.apprise_obj) == 1
 
 
-def test_multiple_notification_batching(notify_mock, noop):
+def test_multiple_notification_batching(apprise_noop):
     """Test that multiple log messages get batched into single notification"""
-    appriser = Appriser()
-    appriser.add(noop)
+    appriser, noop = apprise_noop
 
     # Generate logs over time
     logger.error("Error 1")
@@ -118,8 +116,8 @@ def test_multiple_notification_batching(notify_mock, noop):
     appriser.send_notification()
 
     # Should be one notification containing all messages
-    assert len(notify_mock) == 1
-    notification = notify_mock[0]
+    assert len(noop.calls) == 1
+    notification = noop.calls[0]
     assert "Error 1" in notification["body"]
     assert "Error 2" in notification["body"]
     assert "Critical 1" in notification["body"]
@@ -233,14 +231,13 @@ def test_all_standard_levels():
     assert len(appriser.buffer) == len(standard_levels)
 
 
-def test_send_notification_parameters(mocker, noop):
+def test_send_notification_parameters(mocker, apprise_noop):
     test_message = "Test log message"
     custom_title = "Custom Title"
     custom_type = "success"
     custom_format = NotifyFormat.MARKDOWN
 
-    appriser = Appriser()
-    appriser.add(noop)
+    appriser, _noop = apprise_noop
     appriser.buffer.append(test_message)
 
     mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
@@ -271,13 +268,12 @@ def test_send_notification_parameters(mocker, noop):
         (NotifyType.SUCCESS, "markdown"),
     ],
 )
-def test_notification_parameter_types(mocker, noop, notify_type_param, notify_format_param):
+def test_notification_parameter_types(mocker, apprise_noop, notify_type_param, notify_format_param):
     """Test that Appriser accepts different parameter types for notify_type and body_format"""
     test_message = "Test log message"
     custom_title = "Custom Title"
 
-    appriser = Appriser()
-    appriser.add(noop)
+    appriser, _noop = apprise_noop
     appriser.buffer.append(test_message)
 
     mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
