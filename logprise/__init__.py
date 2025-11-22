@@ -363,7 +363,7 @@ class Appriser:
     ) -> None:
         """Send a single notification with all accumulated logs."""
         if not self.buffer:
-            logger.debug("No logs to send")
+            logger.trace("No logs to send")
             return
 
         # Format the buffered logs into a single message
