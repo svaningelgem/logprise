@@ -2,7 +2,7 @@ import logging
 from collections.abc import Iterable
 from typing import ClassVar
 
-import apprise  # type: ignore[import-untyped]
+import apprise
 import loguru
 from apprise import NotifyFormat
 from loguru import logger
