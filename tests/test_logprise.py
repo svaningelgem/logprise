@@ -88,6 +88,25 @@ def test_send_notification_empty():
     assert len(appriser.buffer) == 0
 
 
+def test_send_notification_skipped_when_no_services(mocker):
+    """With logs buffered but no services configured, apprise.notify is never called.
+
+    This avoids apprise logging 'There are no service(s) to notify' on every flush.
+    """
+    appriser = Appriser(apprise_trigger_level="ERROR")
+    assert len(appriser.apprise_obj) == 0  # no services configured
+
+    logger.error("Boom")
+    assert len(appriser.buffer) == 1
+
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    appriser.send_notification()
+
+    mock_notify.assert_not_called()
+    # The buffered log is retained, not silently dropped.
+    assert len(appriser.buffer) == 1
+
+
 def test_config_file_loading(tmp_path, mocker):
     """Test that Appriser can load config from filesystem"""
     # Mock DEFAULT_CONFIG_PATHS to only use our temp directory

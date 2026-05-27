@@ -366,6 +366,12 @@ class Appriser:
             logger.trace("No logs to send")
             return
 
+        if not len(self.apprise_obj):
+            # No services configured: skip notifying so apprise doesn't log
+            # "There are no service(s) to notify" for every flush.
+            logger.trace("No notification services configured; skipping notification")
+            return
+
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
 
