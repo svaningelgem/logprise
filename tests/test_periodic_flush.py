@@ -4,9 +4,9 @@ import time
 from threading import ExceptHookArgs
 from unittest.mock import MagicMock
 
-from conftest import NoOpNotifier
+from conftest import make_appriser
 
-from logprise import Appriser, logger
+from logprise import logger
 
 
 def test_uncaught_exception_hook(apprise_noop, monkeypatch):
@@ -61,12 +61,11 @@ def test_periodic_flush(apprise_noop, monkeypatch):
     mock_thread.return_value.start.assert_called_once()
 
 
-def test_periodic_flush_integration():
+def test_periodic_flush_integration(apprise_noop):
     """Test the periodic flush actually works (integration test)."""
-    # Create an Appriser with a short flush interval
-    appriser = Appriser(flush_interval=0.2)
-    noop = NoOpNotifier()
-    appriser.add(noop)
+    # Use a short flush interval for the test
+    appriser, noop = apprise_noop
+    appriser.flush_interval = 0.2
 
     # Generate an error log (should be captured)
     logger.error("Test periodic flush")
@@ -85,7 +84,7 @@ def test_periodic_flush_integration():
 
 def test_stop_periodic_flush():
     """Test that stop_periodic_flush properly terminates the flush thread."""
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # Create a mock thread
     mock_thread = MagicMock()
@@ -170,7 +169,7 @@ def test_flush_only_if_buffer_has_content(apprise_noop, monkeypatch):
 
 def test_periodic_flush_stops_on_event_set(mocker):
     """Test that periodic_flush exits when stop_event is set."""
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # Pre-set the stop event before calling _periodic_flush
     appriser._stop_event.set()
@@ -194,7 +193,7 @@ def test_periodic_flush_stops_on_event_set(mocker):
 
 def test_periodic_flush_empty_buffer(mocker):
     """Test that periodic_flush skips sending when buffer is empty."""
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # Clear buffer
     appriser.buffer.clear()
@@ -223,7 +222,7 @@ def test_periodic_flush_empty_buffer(mocker):
 
 def test_stop_periodic_flush_idempotent(mocker):
     """Test that calling stop_periodic_flush twice is safe."""
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # First call
     appriser.stop_periodic_flush()
@@ -245,8 +244,7 @@ def test_stop_periodic_flush_idempotent(mocker):
 
 def test_notify_failure_preserves_buffer(mocker):
     """Test that buffer is not cleared when notification fails."""
-    appriser = Appriser()
-    appriser.add(NoOpNotifier())  # a service must be configured for notify() to run
+    appriser = make_appriser(add_noop=True)
 
     # Mock apprise_obj.notify to return False (failure)
     mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)

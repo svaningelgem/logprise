@@ -32,6 +32,7 @@ class Appriser:
         recursion_depth: int = ...,
         flush_interval: float = 3600,
     ) -> None: ...
+    def install(self) -> None: ...
     def add(
         self,
         servers: str

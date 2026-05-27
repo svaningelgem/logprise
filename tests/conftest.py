@@ -33,9 +33,29 @@ class NoOpNotifier(NotifyBase):
         return True
 
 
+def make_appriser(*, add_noop: bool = False, **kwargs: Any) -> Appriser:
+    """Build an Appriser and arm it, exactly as importing the package does.
+
+    Constructing an Appriser only sets up instance-local state; ``install()``
+    performs the process-global side effects (logging interception, exception
+    hooks, the flush thread). Tests that exercise that behavior need an armed
+    instance, so route every construction through this helper.
+
+    Pass ``add_noop=True`` to also configure a NoOpNotifier, for tests that need
+    a service present (so ``notify()`` is actually attempted) but don't need a
+    handle on it. Tests that need the notifier handle should use the
+    ``apprise_noop`` fixture instead.
+    """
+    appriser = Appriser(**kwargs)
+    appriser.install()
+    if add_noop:
+        appriser.add(NoOpNotifier())
+    return appriser
+
+
 @pytest.fixture
 def apprise_noop() -> Generator[tuple[Appriser, NoOpNotifier], Any, None]:
-    a = Appriser()
+    a = make_appriser()
     noop = NoOpNotifier()
     a.add(noop)
     try:
