@@ -1,5 +1,11 @@
 # Logprise
 
+[![PyPI version](https://img.shields.io/pypi/v/logprise.svg)](https://pypi.org/project/logprise/)
+[![Python versions](https://img.shields.io/pypi/pyversions/logprise.svg)](https://pypi.org/project/logprise/)
+[![Build and Test](https://github.com/svaningelgem/logprise/actions/workflows/build.yml/badge.svg)](https://github.com/svaningelgem/logprise/actions/workflows/build.yml)
+[![codecov](https://img.shields.io/codecov/c/github/svaningelgem/logprise?logo=codecov)](https://codecov.io/gh/svaningelgem/logprise)
+[![License: MIT](https://img.shields.io/pypi/l/logprise.svg)](https://github.com/svaningelgem/logprise/blob/master/LICENSE)
+
 Logprise provides a one-stop logger for your Python application by integrating [loguru](https://github.com/Delgan/loguru/) and [apprise](https://github.com/caronc/apprise). It intercepts all standard `logging` calls and routes them through a unified interface. Above a configurable threshold, errors are automatically sent as alerts via Slack, Discord, email, or 100+ other services - no code changes needed.
 
 ## Why Logprise?
@@ -194,6 +200,27 @@ appriser.send_notification(
     body_format=NotifyFormat.MARKDOWN
 )
 ```
+
+## Testing with `caplog`
+
+Loguru logs don't normally show up in pytest's built-in `caplog` fixture, because loguru bypasses the standard `logging` machinery that `caplog` hooks into. Logprise ships a pytest plugin that bridges this gap automatically - it's enabled the moment logprise is installed, with no configuration or `conftest.py` changes required.
+
+Just use `caplog` as you always would:
+
+```python
+import logging
+from logprise import logger
+
+
+def test_payment_failure_is_logged(caplog):
+    with caplog.at_level(logging.ERROR):
+        logger.error("Payment processing failed")
+
+    assert "Payment processing failed" in caplog.text
+    assert caplog.records[0].levelno == logging.ERROR
+```
+
+This works for logs from `logprise.logger`, from the standard `logging` module, and from third-party libraries - anything logprise intercepts. The `caplog.at_level()` context manager and level filtering behave exactly as they do with standard logging.
 
 ## Contributing
 
