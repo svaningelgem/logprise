@@ -1,12 +1,11 @@
 import pytest
 import pytest_mock
-
-from logprise import Appriser
+from conftest import make_appriser
 
 
 def test_appriser_flush_interval_setter(mocker: pytest_mock.MockerFixture):
     """Test setting a valid flush interval."""
-    appriser = Appriser(flush_interval=123)
+    appriser = make_appriser(flush_interval=123)
     stop_periodic_flush_mock = mocker.patch.object(appriser, "stop_periodic_flush")
     start_periodic_flush_mock = mocker.patch.object(appriser, "_start_periodic_flush")
 
@@ -23,7 +22,7 @@ def test_appriser_flush_interval_setter(mocker: pytest_mock.MockerFixture):
 
 def test_appriser_flush_interval_set_to_same_value(mocker: pytest_mock.MockerFixture):
     """Test setting the flush interval to the same value."""
-    appriser = Appriser(flush_interval=123)
+    appriser = make_appriser(flush_interval=123)
     stop_periodic_flush_mock = mocker.patch.object(appriser, "stop_periodic_flush")
     start_periodic_flush_mock = mocker.patch.object(appriser, "_start_periodic_flush")
 
@@ -40,7 +39,7 @@ def test_appriser_flush_interval_set_to_same_value(mocker: pytest_mock.MockerFix
 @pytest.mark.parametrize("interval", [0, -1, -100, "invalid", None])
 def test_appriser_flush_interval_setter_invalid(mocker: pytest_mock.MockerFixture, interval: float | str | None):
     """Test setting an invalid flush interval."""
-    appriser = Appriser()
+    appriser = make_appriser()
     stop_periodic_flush_mock = mocker.patch.object(appriser, "stop_periodic_flush")
     start_periodic_flush_mock = mocker.patch.object(appriser, "_start_periodic_flush")
 

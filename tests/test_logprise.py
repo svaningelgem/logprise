@@ -4,9 +4,10 @@ from logging import NullHandler, StreamHandler
 
 import pytest
 from apprise import NotifyFormat, NotifyType
+from conftest import make_appriser
 from loguru import logger
 
-from logprise import Appriser, InterceptHandler
+from logprise import InterceptHandler
 
 
 def test_intercept_handler_forwards_to_loguru():
@@ -16,7 +17,7 @@ def test_intercept_handler_forwards_to_loguru():
     standard_logger.setLevel(logging.DEBUG)
 
     # Create an Appriser to capture the logs
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # Log using standard logging
     test_message = "Test log message"
@@ -30,7 +31,7 @@ def test_intercept_handler_forwards_to_loguru():
 
 def test_appriser_notification_levels():
     """Test that Appriser respects different notification levels"""
-    appriser = Appriser(apprise_trigger_level="WARNING")
+    appriser = make_appriser(apprise_trigger_level="WARNING")
 
     # These should be captured
     logger.warning("Test warning")
@@ -73,7 +74,7 @@ def test_send_notification(apprise_noop):
 
 def test_send_notification_empty():
     """Test sending notification with no triggers"""
-    appriser = Appriser(apprise_trigger_level="ERROR")
+    appriser = make_appriser(apprise_trigger_level="ERROR")
 
     # Log messages below notification level
     logger.debug("Debug message")
@@ -94,7 +95,7 @@ def test_send_notification_discards_buffer_when_no_services(mocker):
     Skipping the call avoids apprise logging 'There are no service(s) to notify' on every
     flush; dropping the buffer avoids accumulating undeliverable logs forever.
     """
-    appriser = Appriser(apprise_trigger_level="ERROR")
+    appriser = make_appriser(apprise_trigger_level="ERROR")
     assert len(appriser.apprise_obj) == 0  # no services configured
 
     logger.error("Boom")
@@ -137,7 +138,7 @@ def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, appri
 
 def test_intercept_skips_setup_for_already_handled_logger():
     """A logger already flagged as handled does not get the interceptor re-attached."""
-    Appriser()  # patches logging.Logger._log
+    make_appriser()  # patches logging.Logger._log
 
     already_handled = logging.getLogger("test.already.handled")
     already_handled._has_been_handled_by_interceptor = True
@@ -146,6 +147,16 @@ def test_intercept_skips_setup_for_already_handled_logger():
     already_handled.error("message")
 
     assert not any(isinstance(h, InterceptHandler) for h in already_handled.handlers)
+
+
+def test_install_is_idempotent(mocker):
+    """A second install() is a no-op and does not re-run the global side effects."""
+    appriser = make_appriser()  # installs once
+
+    spy = mocker.patch.object(appriser, "_setup_interception_handler")
+    appriser.install()  # already armed -> early return
+
+    spy.assert_not_called()
 
 
 def test_config_file_loading(tmp_path, mocker):
@@ -157,7 +168,7 @@ def test_config_file_loading(tmp_path, mocker):
     # Create a temporary config file
     config_path.write_text("urls:\n      - mailto://localhost?from=me@local.be&to=you@local.be")
 
-    appriser = Appriser()
+    appriser = make_appriser()
     # If config is loaded successfully, urls will be populated
     assert len(appriser.apprise_obj) == 1
 
@@ -187,7 +198,7 @@ def test_multiple_notification_batching(apprise_noop):
 def test_notification_level_changes():
     """Test changing notification levels and verifying correct message capture"""
     # Initialize with WARNING level
-    appriser = Appriser(apprise_trigger_level="WARNING")
+    appriser = make_appriser(apprise_trigger_level="WARNING")
 
     # First batch: WARNING level
     logger.info("Info message 1")
@@ -221,7 +232,7 @@ def test_notification_level_changes():
 
 def test_notification_level_edge_cases():
     """Test edge cases for notification levels"""
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # Test setting levels in different formats
     appriser.notification_level = "DEBUG"  # string
@@ -253,7 +264,7 @@ def test_custom_log_level():
     standard_logger.setLevel(custom_level_num)
 
     # Create Appriser with low threshold to catch all messages
-    appriser = Appriser(apprise_trigger_level="DEBUG")
+    appriser = make_appriser(apprise_trigger_level="DEBUG")
 
     # Log using our custom level
     standard_logger.log(custom_level_num, "Custom level message")
@@ -267,7 +278,7 @@ def test_custom_log_level():
 
 def test_all_standard_levels():
     """Test all standard logging levels are handled correctly"""
-    appriser = Appriser(apprise_trigger_level="DEBUG")
+    appriser = make_appriser(apprise_trigger_level="DEBUG")
 
     # Dictionary of standard logging levels and their expected loguru equivalents
     standard_levels = {
@@ -359,7 +370,7 @@ def test_intercepted_logger_doesnt_output_its_messages(capsys) -> None:
     l2.addHandler(StreamHandler())
     l3 = logging.getLogger("test.logger.sublogger")
     # Create an Appriser to capture the logs
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # Log using standard logging
     test_message = "Test log message"
@@ -382,7 +393,7 @@ def test_intercepted_logger_has_streamhandler(capsys) -> None:
     _log.addHandler(StreamHandler())
 
     # Create an Appriser to capture the logs
-    appriser = Appriser()
+    appriser = make_appriser()
 
     # Log using standard logging
     test_message = "Test log message"

@@ -3,9 +3,7 @@ import threading
 from threading import ExceptHookArgs
 
 from apprise import Apprise
-from conftest import NoOpNotifier
-
-from logprise import Appriser
+from conftest import make_appriser
 
 
 def test_uncaught_exception_hook_with_non_default_existing_hook(mocker):
@@ -22,8 +20,7 @@ def test_uncaught_exception_hook_with_non_default_existing_hook(mocker):
 
     assert sys.excepthook == my_global_exception_hook
 
-    appriser = Appriser()
-    appriser.add(NoOpNotifier())  # a service must be configured for notify() to be attempted
+    make_appriser(add_noop=True)
 
     assert sys.excepthook != my_global_exception_hook, "Exception hook was not replaced."
 
@@ -39,8 +36,7 @@ def test_uncaught_exception_hook_with_default_existing_hook(mocker):
     """Test that uncaught exceptions trigger immediate notifications."""
     mock_send = mocker.patch.object(Apprise, "notify", side_effect=Exception)
 
-    appriser = Appriser()
-    appriser.add(NoOpNotifier())  # a service must be configured for notify() to be attempted
+    make_appriser(add_noop=True)
 
     # Simulate an uncaught exception
     sys.excepthook(ValueError, ValueError("Test exception"), None)
@@ -63,8 +59,7 @@ def test_uncaught_threading_exception_hook_with_non_default_existing_hook(mocker
 
     assert threading.excepthook == my_global_exception_hook
 
-    appriser = Appriser()
-    appriser.add(NoOpNotifier())  # a service must be configured for notify() to be attempted
+    make_appriser(add_noop=True)
 
     assert threading.excepthook != my_global_exception_hook, "Exception hook was not replaced."
 
@@ -80,8 +75,7 @@ def test_uncaught_threading_exception_hook_with_default_existing_hook(mocker):
     """Test that uncaught exceptions trigger immediate notifications."""
     mock_send = mocker.patch.object(Apprise, "notify", side_effect=Exception)
 
-    appriser = Appriser()
-    appriser.add(NoOpNotifier())  # a service must be configured for notify() to be attempted
+    make_appriser(add_noop=True)
 
     # Simulate an uncaught exception
     threading.excepthook(ExceptHookArgs((ValueError, ValueError("Test exception"), None, None)))
@@ -93,9 +87,7 @@ def test_uncaught_threading_exception_hook_with_default_existing_hook(mocker):
 def test_multiple_apprise_objects_with_non_default_existing_hook(mocker):
     """Test that uncaught exceptions trigger immediate notifications."""
     mock_send = mocker.patch.object(Apprise, "notify", side_effect=Exception)
-    _1 = Appriser()
-    _1.add(NoOpNotifier())  # a service must be configured for notify() to be attempted
-    _2 = Appriser()
-    _2.add(NoOpNotifier())
+    _1 = make_appriser(add_noop=True)
+    _2 = make_appriser(add_noop=True)
     sys.excepthook(ValueError, ValueError("Test exception"), None)
     mock_send.assert_called_once()

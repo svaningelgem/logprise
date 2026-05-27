@@ -94,6 +94,7 @@ class Appriser:
         recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
         flush_interval: float = 3600,
     ) -> None:
+        self._installed: bool = False
         self._flush_thread: threading.Thread | None = None
         self._stop_event: threading.Event = threading.Event()
 
@@ -108,7 +109,19 @@ class Appriser:
         self.apprise_obj: apprise.Apprise = apprise.Apprise()
         self.buffer: list[loguru.Message] = []
 
-        # Initialize everything
+    def install(self) -> None:
+        """Arm every process-global side effect of this Appriser.
+
+        Constructing an :class:`Appriser` only sets up instance-local state.
+        This method installs the logging interception, the sys/threading
+        exception hooks, the loguru removal prevention, the atexit cleanup, and
+        starts the periodic flush thread. It is idempotent: calling it more than
+        once is a no-op.
+        """
+        if self._installed:
+            return
+        self._installed = True
+
         self._load_default_config_paths()
         self._setup_interception_handler()
         self._setup_sys_exception_hook()
@@ -281,8 +294,9 @@ class Appriser:
 
         if self._flush_interval != value:
             self._flush_interval = value
-            self.stop_periodic_flush()
-            self._start_periodic_flush()
+            if self._installed:
+                self.stop_periodic_flush()
+                self._start_periodic_flush()
 
     def _periodic_flush(self) -> None:
         """Periodically flush log buffer."""
@@ -392,3 +406,4 @@ class Appriser:
 
 
 appriser = Appriser()
+appriser.install()
