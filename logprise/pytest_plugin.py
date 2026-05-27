@@ -10,7 +10,7 @@ thanks to the pytest11 entry point defined in pyproject.toml.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from loguru import logger
@@ -18,8 +18,10 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from logging import _SysExcInfoType
 
-    from _pytest.logging import LogCaptureFixture
+    import loguru
+    from pytest import LogCaptureFixture
 
 
 class _CaplogState:
@@ -31,7 +33,7 @@ class _CaplogState:
 _state = _CaplogState()
 
 
-def _create_log_record(record: dict) -> logging.LogRecord:
+def _create_log_record(record: loguru.Record) -> logging.LogRecord:
     """Create a standard logging.LogRecord from a loguru record dict."""
     # Get the level info
     level_no = record["level"].no
@@ -52,7 +54,7 @@ def _create_log_record(record: dict) -> logging.LogRecord:
         lineno=line_no,
         msg=record["message"],
         args=(),
-        exc_info=record["exception"],
+        exc_info=cast("_SysExcInfoType | None", record["exception"]),
         func=func_name,
     )
 
@@ -62,7 +64,7 @@ def _create_log_record(record: dict) -> logging.LogRecord:
     return log_record
 
 
-def _loguru_to_caplog(message: object) -> None:
+def _loguru_to_caplog(message: loguru.Message) -> None:
     """Sink function that forwards loguru messages directly to caplog's handler.
 
     This function bypasses the standard logging system entirely to avoid
@@ -72,7 +74,7 @@ def _loguru_to_caplog(message: object) -> None:
         return
 
     # Get the record dict from the message
-    record = message.record  # type: ignore[union-attr]
+    record = message.record
 
     # Create a standard LogRecord
     log_record = _create_log_record(record)
