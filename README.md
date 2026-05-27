@@ -107,7 +107,7 @@ appriser.flush_interval = 1800  # Send every 30 minutes
 appriser.send_notification()
 
 # Clear pending notifications without sending
-appriser.buffer.clear()
+appriser.clear()
 ```
 
 Notifications automatically flush when your program exits.
