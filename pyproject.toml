@@ -17,7 +17,8 @@ apprise = "*"
 urllib3 = "<3"  # Because else poetry won't work anymore!
 
 [tool.poetry.group.dev.dependencies]
-pytest-cov = "*"
+pytest = "*"
+coverage = { extras = ["toml"], version = "*" }
 pytest-mock = "*"
 ruff = "*"
 mypy = "*"
