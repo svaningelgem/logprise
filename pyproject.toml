@@ -17,7 +17,12 @@ apprise = "*"
 urllib3 = "<3"  # Because else poetry won't work anymore!
 
 [tool.poetry.group.dev.dependencies]
-pytest-cov = "*"
+pytest = "*"
+# Coverage is run via `coverage run -m pytest`. The [toml] extra pulls in tomli
+# so coverage can read its [tool.coverage] config from pyproject.toml on Python
+# <= 3.10 (3.11+ uses stdlib tomllib). Once 3.10 support is dropped, the [toml]
+# extra is a no-op and `coverage = "*"` suffices.
+coverage = { extras = ["toml"], version = "*" }
 pytest-mock = "*"
 ruff = "*"
 mypy = "*"
@@ -144,8 +149,8 @@ exclude_also = [
 show_missing = true
 
 [tool.pytest.ini_options]
-#addopts = "--no-cov"  # This disables coverage
-addopts = "--cov=logprise --cov-branch --cov-report=html --cov-report=xml --cov-report=term"
+# Coverage is collected out-of-process via `coverage run -m pytest` (see
+# [tool.coverage.run]). A plain `pytest` run stays fast and coverage-free.
 
 [tool.black]
 line-length = 120

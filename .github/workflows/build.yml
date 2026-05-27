@@ -74,7 +74,12 @@ jobs:
         run: poetry install --no-interaction
 
       - name: Run tests with coverage
-        run: poetry run pytest --cov=logprise --cov-report=xml
+        # Use `coverage run` (not pytest-cov) so measurement starts before pytest
+        # imports the logprise package and its pytest plugin, capturing their
+        # module-level definitions too.
+        run: |
+          poetry run coverage run -m pytest
+          poetry run coverage xml
 
       - name: Upload coverage report
         if: github.actor != 'dependabot[bot]'
