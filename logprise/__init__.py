@@ -319,10 +319,7 @@ class Appriser:
         return self.apprise_obj.add(servers=servers, asset=asset, tag=tag)
 
     def clear(self) -> None:
-        """Discard any buffered logs that have not been sent yet.
-
-        Configured notification services are left untouched.
-        """
+        """Discard any buffered logs that have not been sent yet."""
         self.buffer.clear()
 
     def stop_periodic_flush(self) -> None:
