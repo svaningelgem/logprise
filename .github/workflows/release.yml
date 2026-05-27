@@ -65,7 +65,12 @@ jobs:
 
       - name: Run tests with coverage
         if: always()
-        run: poetry run pytest --cov=${{ github.event.repository.name }} --cov-report=xml
+        # Use `coverage run` (not pytest-cov) so measurement starts before pytest
+        # imports the package and its pytest plugin, capturing their module-level
+        # definitions too.
+        run: |
+          poetry run coverage run -m pytest
+          poetry run coverage xml
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v6

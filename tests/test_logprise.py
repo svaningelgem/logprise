@@ -6,7 +6,7 @@ import pytest
 from apprise import NotifyFormat, NotifyType
 from loguru import logger
 
-from logprise import Appriser
+from logprise import Appriser, InterceptHandler
 
 
 def test_intercept_handler_forwards_to_loguru():
@@ -105,6 +105,32 @@ def test_send_notification_skipped_when_no_services(mocker):
     mock_notify.assert_not_called()
     # The buffered log is retained, not silently dropped.
     assert len(appriser.buffer) == 1
+
+
+def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, apprise_noop):
+    """When notify() reports failure, the buffer is kept for the next attempt."""
+    appriser, _ = apprise_noop
+
+    logger.error("Boom")
+    assert len(appriser.buffer) == 1
+
+    mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)
+    appriser.send_notification()
+
+    assert len(appriser.buffer) == 1  # not cleared, since the send did not succeed
+
+
+def test_intercept_skips_setup_for_already_handled_logger():
+    """A logger already flagged as handled does not get the interceptor re-attached."""
+    Appriser()  # patches logging.Logger._log
+
+    already_handled = logging.getLogger("test.already.handled")
+    already_handled._has_been_handled_by_interceptor = True
+
+    # Routes through the patched _log and takes the "skip setup" branch.
+    already_handled.error("message")
+
+    assert not any(isinstance(h, InterceptHandler) for h in already_handled.handlers)
 
 
 def test_config_file_loading(tmp_path, mocker):
