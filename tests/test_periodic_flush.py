@@ -246,6 +246,7 @@ def test_stop_periodic_flush_idempotent(mocker):
 def test_notify_failure_preserves_buffer(mocker):
     """Test that buffer is not cleared when notification fails."""
     appriser = Appriser()
+    appriser.add(NoOpNotifier())  # a service must be configured for notify() to run
 
     # Mock apprise_obj.notify to return False (failure)
     mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)

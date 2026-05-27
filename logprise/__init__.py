@@ -318,6 +318,10 @@ class Appriser:
 
         return self.apprise_obj.add(servers=servers, asset=asset, tag=tag)
 
+    def clear(self) -> None:
+        """Discard any buffered logs that have not been sent yet."""
+        self.buffer.clear()
+
     def stop_periodic_flush(self) -> None:
         """Stop the periodic flush thread."""
         if self._flush_thread and self._flush_thread.is_alive():
@@ -368,8 +372,11 @@ class Appriser:
 
         if not len(self.apprise_obj):
             # No services configured: skip notifying so apprise doesn't log
-            # "There are no service(s) to notify" for every flush.
-            logger.trace("No notification services configured; skipping notification")
+            # "There are no service(s) to notify" for every flush. Drop the
+            # buffered logs too -- services should have been configured by now,
+            # and there is nowhere to deliver them, so keeping them only leaks memory.
+            logger.trace("No notification services configured; discarding buffered logs")
+            self.clear()
             return
 
         # Format the buffered logs into a single message
@@ -379,7 +386,7 @@ class Appriser:
             if message and self.apprise_obj.notify(
                 title=title, notify_type=notify_type, body=message, body_format=body_format
             ):
-                self.buffer.clear()  # Clear the buffer after sending
+                self.clear()  # Clear the buffer after sending
         except BaseException as e:
             logger.warning(f"Failed to send notification: {e}")
 

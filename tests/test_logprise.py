@@ -88,10 +88,11 @@ def test_send_notification_empty():
     assert len(appriser.buffer) == 0
 
 
-def test_send_notification_skipped_when_no_services(mocker):
-    """With logs buffered but no services configured, apprise.notify is never called.
+def test_send_notification_discards_buffer_when_no_services(mocker):
+    """With logs buffered but no services configured, notify is skipped and the buffer dropped.
 
-    This avoids apprise logging 'There are no service(s) to notify' on every flush.
+    Skipping the call avoids apprise logging 'There are no service(s) to notify' on every
+    flush; dropping the buffer avoids accumulating undeliverable logs forever.
     """
     appriser = Appriser(apprise_trigger_level="ERROR")
     assert len(appriser.apprise_obj) == 0  # no services configured
@@ -103,8 +104,22 @@ def test_send_notification_skipped_when_no_services(mocker):
     appriser.send_notification()
 
     mock_notify.assert_not_called()
-    # The buffered log is retained, not silently dropped.
+    # Nothing can deliver the logs, so they are discarded rather than hoarded.
+    assert len(appriser.buffer) == 0
+
+
+def test_clear_discards_buffer_but_keeps_services(apprise_noop):
+    """clear() drops buffered logs while leaving configured services intact."""
+    appriser, _ = apprise_noop
+
+    logger.error("Boom")
     assert len(appriser.buffer) == 1
+    assert len(appriser.apprise_obj) == 1
+
+    appriser.clear()
+
+    assert len(appriser.buffer) == 0
+    assert len(appriser.apprise_obj) == 1  # services are preserved
 
 
 def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, apprise_noop):
