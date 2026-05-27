@@ -1,3 +1,4 @@
+import importlib
 import sys
 import threading
 from collections.abc import Generator
@@ -6,7 +7,21 @@ from typing import Any
 import pytest
 from apprise import NotifyBase, NotifyType
 
-from logprise import Appriser, logger
+from logprise import Appriser, logger, pytest_plugin
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _measure_plugin_module_definitions() -> None:
+    """Re-import the logprise pytest plugin so its module-level code is measured.
+
+    Pytest loads the plugin (via its pytest11 entry point) at startup, before
+    pytest-cov begins measuring, so the imports, class and function definitions
+    would otherwise never register as executed. Reloading once at session start
+    runs them again while coverage is active. Reload refreshes the existing
+    module namespace in place, so the already-registered caplog fixture keeps
+    working.
+    """
+    importlib.reload(pytest_plugin)
 
 
 class NoOpNotifier(NotifyBase):

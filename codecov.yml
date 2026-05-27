@@ -1,0 +1,15 @@
+# Codecov configuration.
+#
+# Every change must fully cover the lines it touches: the patch status fails
+# unless 100% of the lines added or modified in a pull request are covered.
+# Overall project coverage is held at "no regression" so it can only improve
+# over time.
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 0%
+    patch:
+      default:
+        target: 100%
