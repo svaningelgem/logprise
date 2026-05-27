@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import logging
 
+from logprise import logger
+
 
 def test_loguru_logger_captured_in_caplog(caplog):
     """Test that logs from loguru's logger show up in caplog."""
-    from logprise import logger
-
     with caplog.at_level(logging.INFO):
         logger.info("Test message from loguru")
 
@@ -30,8 +30,6 @@ def test_standard_logging_captured_in_caplog(caplog):
 
 def test_loguru_different_levels_captured(caplog):
     """Test that different log levels are captured correctly."""
-    from logprise import logger
-
     with caplog.at_level(logging.DEBUG):
         logger.debug("Debug message")
         logger.info("Info message")
@@ -47,8 +45,6 @@ def test_loguru_different_levels_captured(caplog):
 
 def test_caplog_level_filtering(caplog):
     """Test that caplog level filtering works with logprise."""
-    from logprise import logger
-
     with caplog.at_level(logging.WARNING):
         logger.info("Should not appear")
         logger.warning("Should appear")
@@ -60,8 +56,6 @@ def test_caplog_level_filtering(caplog):
 
 def test_caplog_records_have_correct_level(caplog):
     """Test that captured records have the correct log level."""
-    from logprise import logger
-
     with caplog.at_level(logging.DEBUG):
         logger.warning("Warning test")
         logger.error("Error test")
@@ -77,8 +71,6 @@ def test_caplog_records_have_correct_level(caplog):
 
 def test_caplog_clear_works(caplog):
     """Test that caplog.clear() works properly."""
-    from logprise import logger
-
     with caplog.at_level(logging.INFO):
         logger.info("First message")
         assert len(caplog.records) >= 1
@@ -95,8 +87,6 @@ def test_caplog_clear_works(caplog):
 
 def test_multiple_loggers_captured(caplog):
     """Test that logs from multiple loggers are captured."""
-    from logprise import logger
-
     named_logger = logging.getLogger("test.named.logger")
 
     with caplog.at_level(logging.INFO):
