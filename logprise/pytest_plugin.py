@@ -97,12 +97,15 @@ def _clear_appriser_buffer() -> Generator[None, None, None]:
     services the developer has configured -- so a green test run still pages /
     mails them with every intentionally-exercised error path.
 
-    Mirroring the ``caplog`` fixture's "yield then release in ``finally``" shape,
-    autouse so every test (caplog or not) owns the buffer for its duration and
-    hands it back empty. What happens before pytest starts or after pytest
-    returns is the user's domain; inside the session, we leave no buffered
-    records behind.
+    Mirroring the ``caplog`` fixture's "set up, yield, release in ``finally``"
+    shape, autouse so every test (caplog or not) owns the buffer for its
+    duration: cleared on the way in so the test starts clean (the first test
+    would otherwise inherit whatever buffered during collection / plugin load),
+    cleared again on teardown so atexit's :meth:`Appriser.cleanup` sees nothing
+    to flush. What happens before pytest starts or after pytest returns is the
+    user's domain; inside the session, we leave no buffered records behind.
     """
+    appriser.buffer.clear()
     try:
         yield
     finally:
