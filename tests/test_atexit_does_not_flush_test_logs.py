@@ -1,12 +1,12 @@
-"""End-to-end check that the pytest plugin clears the buffer at session finish.
+"""End-to-end check that a test's error logs never reach atexit's flush.
 
 Spawns a real pytest subprocess so ``atexit`` actually fires. The inline test
 file registers its own ``atexit`` handler *after* importing logprise, so by
 LIFO order that handler runs *before* :meth:`Appriser.cleanup` -- capturing
 ``len(appriser.buffer)`` at the moment cleanup is about to flush.
 
-If the ``pytest_sessionfinish`` wrapper hook in ``logprise.pytest_plugin`` did
-its job, the buffer is empty by then and the sentinel file reads ``"0"``.
+If the autouse buffer-clearing fixture in ``logprise.pytest_plugin`` did its
+job, the buffer is empty by then and the sentinel file reads ``"0"``.
 """
 
 import subprocess

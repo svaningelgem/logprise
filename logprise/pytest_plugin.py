@@ -87,23 +87,24 @@ def _loguru_to_caplog(message: loguru.Message) -> None:
         _state.fixture.handler.emit(log_record)
 
 
-@pytest.hookimpl(wrapper=True)
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[None, object, object]:
-    """Drop buffered logs at the pytest-session boundary.
+@pytest.fixture(autouse=True)
+def _clear_appriser_buffer() -> Generator[None, None, None]:
+    """Hand every test an empty appriser buffer, and release it on teardown.
 
-    Errors emitted during tests (``logger.error(...)`` etc.) accumulate in
-    ``appriser.buffer``. Without this hook, ``atexit`` would later fire
+    Errors emitted during a test (``logger.error(...)`` etc.) accumulate in
+    ``appriser.buffer``. Without this fixture, ``atexit`` would later fire
     :meth:`Appriser.cleanup`, which flushes that buffer to whatever real apprise
     services the developer has configured -- so a green test run still pages /
     mails them with every intentionally-exercised error path.
 
     Mirroring the ``caplog`` fixture's "yield then release in ``finally``" shape,
-    this wrapper hands the buffer back empty at the session boundary. What
-    happens before pytest starts or after pytest returns is the user's domain;
-    inside the session, we leave no buffered records behind.
+    autouse so every test (caplog or not) owns the buffer for its duration and
+    hands it back empty. What happens before pytest starts or after pytest
+    returns is the user's domain; inside the session, we leave no buffered
+    records behind.
     """
     try:
-        return (yield)
+        yield
     finally:
         appriser.buffer.clear()
 
