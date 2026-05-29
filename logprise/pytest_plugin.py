@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from loguru import logger
 
+from logprise import appriser
+
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -83,6 +85,31 @@ def _loguru_to_caplog(message: loguru.Message) -> None:
     # This respects caplog.at_level() context manager
     if log_record.levelno >= _state.fixture.handler.level:
         _state.fixture.handler.emit(log_record)
+
+
+@pytest.fixture(autouse=True)
+def _clear_appriser_buffer() -> Generator[None, None, None]:
+    """Hand every test an empty appriser buffer, and release it on teardown.
+
+    Errors emitted during a test (``logger.error(...)`` etc.) accumulate in
+    ``appriser.buffer``. Without this fixture, ``atexit`` would later fire
+    :meth:`Appriser.cleanup`, which flushes that buffer to whatever real apprise
+    services the developer has configured -- so a green test run still pages /
+    mails them with every intentionally-exercised error path.
+
+    Mirroring the ``caplog`` fixture's "set up, yield, release in ``finally``"
+    shape, autouse so every test (caplog or not) owns the buffer for its
+    duration: cleared on the way in so the test starts clean (the first test
+    would otherwise inherit whatever buffered during collection / plugin load),
+    cleared again on teardown so atexit's :meth:`Appriser.cleanup` sees nothing
+    to flush. What happens before pytest starts or after pytest returns is the
+    user's domain; inside the session, we leave no buffered records behind.
+    """
+    appriser.buffer.clear()
+    try:
+        yield
+    finally:
+        appriser.buffer.clear()
 
 
 @pytest.fixture
