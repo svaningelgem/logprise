@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from loguru import logger
 
+from logprise import appriser
+
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -83,6 +85,27 @@ def _loguru_to_caplog(message: loguru.Message) -> None:
     # This respects caplog.at_level() context manager
     if log_record.levelno >= _state.fixture.handler.level:
         _state.fixture.handler.emit(log_record)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> Generator[None, object, object]:
+    """Drop buffered logs at the pytest-session boundary.
+
+    Errors emitted during tests (``logger.error(...)`` etc.) accumulate in
+    ``appriser.buffer``. Without this hook, ``atexit`` would later fire
+    :meth:`Appriser.cleanup`, which flushes that buffer to whatever real apprise
+    services the developer has configured -- so a green test run still pages /
+    mails them with every intentionally-exercised error path.
+
+    Mirroring the ``caplog`` fixture's "yield then release in ``finally``" shape,
+    this wrapper hands the buffer back empty at the session boundary. What
+    happens before pytest starts or after pytest returns is the user's domain;
+    inside the session, we leave no buffered records behind.
+    """
+    try:
+        return (yield)
+    finally:
+        appriser.buffer.clear()
 
 
 @pytest.fixture
