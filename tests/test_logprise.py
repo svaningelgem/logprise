@@ -72,6 +72,46 @@ def test_send_notification(apprise_noop):
     assert len(appriser.buffer) == 0
 
 
+def test_default_flush_sends_preformatted_html_preserving_whitespace(mocker, apprise_noop):
+    """Default flush wraps logs in an HTML <pre> block so whitespace survives apprise's space->&nbsp; HTML escaping."""
+    appriser, _noop = apprise_noop
+    appriser.buffer.append("run:  pkill -f my_worker.py")  # double space + command spaces must survive intact
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    appriser.send_notification()  # no body_format -> default path
+
+    mock_notify.assert_called_once()
+    kwargs = mock_notify.call_args.kwargs
+    assert kwargs["body_format"] == NotifyFormat.HTML
+    assert kwargs["body"] == "<pre>run:  pkill -f my_worker.py</pre>"
+    assert "&nbsp;" not in kwargs["body"]
+    assert len(appriser.buffer) == 0
+
+
+def test_default_flush_escapes_markup_but_leaves_spaces_and_underscores(mocker, apprise_noop):
+    """<pre> escapes HTML metacharacters but leaves indentation/underscores intact (no Markdown mangling)."""
+    appriser, _noop = apprise_noop
+    appriser.buffer.append("    obj.__init__() & <x>")  # 4-space indent, dunder, &, angle brackets
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    appriser.send_notification()
+
+    assert mock_notify.call_args.kwargs["body"] == "<pre>    obj.__init__() &amp; &lt;x&gt;</pre>"
+
+
+def test_explicit_body_format_is_not_wrapped(mocker, apprise_noop):
+    """An explicit body_format is honored as-is — the <pre> wrapping is only the None default."""
+    appriser, _noop = apprise_noop
+    appriser.buffer.append("plain text")
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    appriser.send_notification(body_format=NotifyFormat.TEXT)
+
+    kwargs = mock_notify.call_args.kwargs
+    assert kwargs["body"] == "plain text"
+    assert kwargs["body_format"] == NotifyFormat.TEXT
+
+
 def test_send_notification_empty():
     """Test sending notification with no triggers"""
     appriser = make_appriser(apprise_trigger_level="ERROR")

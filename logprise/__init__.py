@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import functools
+import html
 import inspect
 import logging
 import sys
@@ -377,9 +378,15 @@ class Appriser:
         self,
         title: str = "Script Notifications",
         notify_type: str | NotifyType = NotifyType.WARNING,
-        body_format: str | NotifyFormat = NotifyFormat.TEXT,
+        body_format: str | NotifyFormat | None = None,
     ) -> None:
-        """Send a single notification with all accumulated logs."""
+        """
+        Send a single notification with all accumulated logs.
+
+        With the default (``body_format=None``) the logs are delivered as a preformatted HTML
+        ``<pre>`` block so whitespace survives verbatim. Pass an explicit ``body_format`` to
+        override (e.g. ``NotifyFormat.TEXT`` / ``MARKDOWN`` / ``HTML``).
+        """
         if not self.buffer:
             logger.trace("No logs to send")
             return
@@ -396,9 +403,18 @@ class Appriser:
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
 
+        # Default path: deliver the logs as a preformatted HTML block. apprise's TEXT->HTML
+        # conversion escapes every space to &nbsp; (apprise.URLBase.escape_html), which mangles
+        # copy-pasted shell commands and indented tracebacks in the HTML alternative most mail
+        # clients display. A <pre> block preserves whitespace verbatim and stops Markdown from
+        # interpreting traceback tokens (e.g. __init__, *args). An explicit body_format opts out.
+        body, resolved_format = message, body_format
+        if resolved_format is None:
+            body, resolved_format = f"<pre>{html.escape(message)}</pre>", NotifyFormat.HTML
+
         try:
             if message and self.apprise_obj.notify(
-                title=title, notify_type=notify_type, body=message, body_format=body_format
+                title=title, notify_type=notify_type, body=body, body_format=resolved_format
             ):
                 self.clear()  # Clear the buffer after sending
         except BaseException as e:
