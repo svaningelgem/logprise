@@ -50,10 +50,6 @@ def test_send_notification(apprise_noop):
     """Test the complete flow from logging to notification"""
     appriser, noop = apprise_noop
 
-    # NoOpNotifier is a plain-text channel; ask for TEXT so apprise doesn't round-trip
-    # the default <pre>-HTML body through html_to_text and collapse the log whitespace.
-    appriser.body_format = NotifyFormat.TEXT
-
     # Generate some logs
     logger.error("Database connection failed")
     logger.critical("System shutdown initiated")
@@ -76,13 +72,14 @@ def test_send_notification(apprise_noop):
     assert len(appriser.buffer) == 0
 
 
-def test_default_flush_sends_preformatted_html_preserving_whitespace(mocker, apprise_noop):
-    """Default flush wraps logs in an HTML <pre> block so whitespace survives apprise's space->&nbsp; HTML escaping."""
+def test_html_opt_in_sends_preformatted_block_preserving_whitespace(mocker, apprise_noop):
+    """body_format=None opts into an HTML <pre> block so whitespace survives apprise's space->&nbsp; HTML escaping."""
     appriser, _noop = apprise_noop
+    appriser.body_format = None  # opt into the preformatted-HTML path
     appriser.buffer.append("run:  pkill -f my_worker.py")  # double space + command spaces must survive intact
     mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
 
-    appriser.send_notification()  # no body_format -> default path
+    appriser.send_notification()
 
     mock_notify.assert_called_once()
     kwargs = mock_notify.call_args.kwargs
@@ -92,9 +89,10 @@ def test_default_flush_sends_preformatted_html_preserving_whitespace(mocker, app
     assert len(appriser.buffer) == 0
 
 
-def test_default_flush_escapes_markup_but_leaves_spaces_and_underscores(mocker, apprise_noop):
+def test_html_opt_in_escapes_markup_but_leaves_spaces_and_underscores(mocker, apprise_noop):
     """<pre> escapes HTML metacharacters but leaves indentation/underscores intact (no Markdown mangling)."""
     appriser, _noop = apprise_noop
+    appriser.body_format = None  # opt into the preformatted-HTML path
     appriser.buffer.append("    obj.__init__() & <x>")  # 4-space indent, dunder, &, angle brackets
     mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
 

@@ -38,7 +38,7 @@ class Appriser:
         recursion_depth: int = ...,
         flush_interval: float = 3600,
         notify_type: str | apprise.NotifyType = ...,
-        body_format: str | NotifyFormat | None = None,
+        body_format: str | NotifyFormat | None = ...,
     ) -> None: ...
     def install(self) -> None: ...
     def add(

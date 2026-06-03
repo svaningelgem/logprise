@@ -105,7 +105,7 @@ class Appriser:
         recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
         flush_interval: float = 3600,
         notify_type: str | NotifyType = NotifyType.WARNING,
-        body_format: str | NotifyFormat | None = None,
+        body_format: str | NotifyFormat | None = NotifyFormat.TEXT,
     ) -> None:
         self._installed: bool = False
         self._flush_thread: threading.Thread | None = None
