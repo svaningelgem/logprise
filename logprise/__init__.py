@@ -31,6 +31,16 @@ if TYPE_CHECKING:
 __all__ = ["appriser", "logger"]
 
 
+# Sentinel for a send_notification argument that was not supplied. None is itself a
+# meaningful value for body_format (it selects the preformatted-HTML default), so a
+# distinct type is needed to tell "omitted" apart from "explicitly None" -- and a named
+# type (rather than object()) lets it join the parameter annotations so mypy/stubtest pass.
+class _UnsetType: ...
+
+
+_UNSET: Final = _UnsetType()
+
+
 # Intercept standard logging calls and forward them to loguru
 class InterceptHandler(logging.Handler):
     LOGGING_FILENAMES: ClassVar[set[str]] = {
@@ -94,6 +104,8 @@ class Appriser:
         apprise_trigger_level: int | str | loguru.Level = "ERROR",
         recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
         flush_interval: float = 3600,
+        notify_type: str | NotifyType = NotifyType.WARNING,
+        body_format: str | NotifyFormat | None = None,
     ) -> None:
         self._installed: bool = False
         self._flush_thread: threading.Thread | None = None
@@ -105,6 +117,13 @@ class Appriser:
 
         self._flush_interval: int | float = 3600  # The default
         self.flush_interval = flush_interval  # Let the property handle the conversion
+
+        # Notification rendering defaults, used by every send_notification (including the
+        # automatic flush/cleanup/exception paths). Reassign these to change how the
+        # accumulated logs are delivered, e.g. ``appriser.body_format = NotifyFormat.TEXT``
+        # for plain-text channels (see send_notification for what body_format=None means).
+        self.notify_type: str | NotifyType = notify_type
+        self.body_format: str | NotifyFormat | None = body_format
 
         self.recursion_depth: int = recursion_depth
         self.apprise_obj: apprise.Apprise = apprise.Apprise()
@@ -377,16 +396,27 @@ class Appriser:
     def send_notification(
         self,
         title: str = "Script Notifications",
-        notify_type: str | NotifyType = NotifyType.WARNING,
-        body_format: str | NotifyFormat | None = None,
+        notify_type: str | NotifyType | _UnsetType = _UNSET,
+        body_format: str | NotifyFormat | None | _UnsetType = _UNSET,
     ) -> None:
         """
         Send a single notification with all accumulated logs.
 
-        With the default (``body_format=None``) the logs are delivered as a preformatted HTML
-        ``<pre>`` block so whitespace survives verbatim. Pass an explicit ``body_format`` to
-        override (e.g. ``NotifyFormat.TEXT`` / ``MARKDOWN`` / ``HTML``).
+        ``notify_type`` and ``body_format`` fall back to the instance attributes (set in
+        ``__init__`` or reassigned directly) when omitted, so the automatic flush,
+        cleanup, and exception paths honour them too. ``None`` is a meaningful value for
+        ``body_format`` (it selects the preformatted-HTML default below), so the sentinel
+        ``_UNSET`` — not ``None`` — marks "argument not supplied".
+
+        With ``body_format=None`` the logs are delivered as a preformatted HTML ``<pre>``
+        block so whitespace survives verbatim. Pass an explicit format
+        (e.g. ``NotifyFormat.TEXT`` / ``MARKDOWN`` / ``HTML``) to override.
         """
+        if isinstance(notify_type, _UnsetType):
+            notify_type = self.notify_type
+        if isinstance(body_format, _UnsetType):
+            body_format = self.body_format
+
         if not self.buffer:
             logger.trace("No logs to send")
             return

@@ -50,6 +50,10 @@ def test_send_notification(apprise_noop):
     """Test the complete flow from logging to notification"""
     appriser, noop = apprise_noop
 
+    # NoOpNotifier is a plain-text channel; ask for TEXT so apprise doesn't round-trip
+    # the default <pre>-HTML body through html_to_text and collapse the log whitespace.
+    appriser.body_format = NotifyFormat.TEXT
+
     # Generate some logs
     logger.error("Database connection failed")
     logger.critical("System shutdown initiated")
@@ -62,10 +66,10 @@ def test_send_notification(apprise_noop):
     notification = noop.calls[0]
     assert notification["title"] == "Script Notifications"
     assert re.search(
-        " \| ERROR    \| test_logprise:test_send_notification:\d+ - Database connection failed", notification["body"]
+        r" \| ERROR    \| test_logprise:test_send_notification:\d+ - Database connection failed", notification["body"]
     )
     assert re.search(
-        " \| CRITICAL \| test_logprise:test_send_notification:\d+ - System shutdown initiated", notification["body"]
+        r" \| CRITICAL \| test_logprise:test_send_notification:\d+ - System shutdown initiated", notification["body"]
     )
 
     # Buffer should be cleared after sending
@@ -110,6 +114,46 @@ def test_explicit_body_format_is_not_wrapped(mocker, apprise_noop):
     kwargs = mock_notify.call_args.kwargs
     assert kwargs["body"] == "plain text"
     assert kwargs["body_format"] == NotifyFormat.TEXT
+
+
+def test_instance_body_format_attribute_is_used_when_arg_omitted(mocker, apprise_noop):
+    """The instance body_format drives the auto-flush path (send_notification with no args)."""
+    appriser, _noop = apprise_noop
+    appriser.body_format = NotifyFormat.TEXT  # reconfigure the default rendering
+    appriser.buffer.append("plain text")
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    appriser.send_notification()  # omit body_format -> falls back to the instance attribute
+
+    kwargs = mock_notify.call_args.kwargs
+    assert kwargs["body"] == "plain text"  # not wrapped in <pre>
+    assert kwargs["body_format"] == NotifyFormat.TEXT
+
+
+def test_explicit_none_forces_html_over_instance_attribute(mocker, apprise_noop):
+    """body_format=None is distinct from omitted: it forces the <pre>-HTML default."""
+    appriser, _noop = apprise_noop
+    appriser.body_format = NotifyFormat.TEXT  # instance default is plain text...
+    appriser.buffer.append("run:  pkill -f x")
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    appriser.send_notification(body_format=None)  # ...but None overrides it for this call
+
+    kwargs = mock_notify.call_args.kwargs
+    assert kwargs["body"] == "<pre>run:  pkill -f x</pre>"
+    assert kwargs["body_format"] == NotifyFormat.HTML
+
+
+def test_instance_notify_type_attribute_is_used_when_arg_omitted(mocker, apprise_noop):
+    """The instance notify_type drives the auto-flush path too."""
+    appriser, _noop = apprise_noop
+    appriser.notify_type = NotifyType.FAILURE
+    appriser.buffer.append("boom")
+    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+
+    appriser.send_notification()
+
+    assert mock_notify.call_args.kwargs["notify_type"] == NotifyType.FAILURE
 
 
 def test_send_notification_empty():
