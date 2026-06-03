@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import functools
+import html
 import inspect
 import logging
 import sys
@@ -28,6 +29,16 @@ if TYPE_CHECKING:
     from apprise import AppriseAsset, AppriseConfig, ConfigBase, NotifyBase
 
 __all__ = ["appriser", "logger"]
+
+
+# Sentinel for a send_notification argument that was not supplied. None is itself a
+# meaningful value for body_format (it selects the preformatted-HTML default), so a
+# distinct type is needed to tell "omitted" apart from "explicitly None" -- and a named
+# type (rather than object()) lets it join the parameter annotations so mypy/stubtest pass.
+class _UnsetType: ...
+
+
+_UNSET: Final = _UnsetType()
 
 
 # Intercept standard logging calls and forward them to loguru
@@ -93,6 +104,8 @@ class Appriser:
         apprise_trigger_level: int | str | loguru.Level = "ERROR",
         recursion_depth: int = apprise.cli.DEFAULT_RECURSION_DEPTH,
         flush_interval: float = 3600,
+        notify_type: str | NotifyType = NotifyType.WARNING,
+        body_format: str | NotifyFormat | None = NotifyFormat.TEXT,
     ) -> None:
         self._installed: bool = False
         self._flush_thread: threading.Thread | None = None
@@ -104,6 +117,13 @@ class Appriser:
 
         self._flush_interval: int | float = 3600  # The default
         self.flush_interval = flush_interval  # Let the property handle the conversion
+
+        # Notification rendering defaults, used by every send_notification (including the
+        # automatic flush/cleanup/exception paths). Reassign these to change how the
+        # accumulated logs are delivered, e.g. ``appriser.body_format = NotifyFormat.TEXT``
+        # for plain-text channels (see send_notification for what body_format=None means).
+        self.notify_type: str | NotifyType = notify_type
+        self.body_format: str | NotifyFormat | None = body_format
 
         self.recursion_depth: int = recursion_depth
         self.apprise_obj: apprise.Apprise = apprise.Apprise()
@@ -376,10 +396,27 @@ class Appriser:
     def send_notification(
         self,
         title: str = "Script Notifications",
-        notify_type: str | NotifyType = NotifyType.WARNING,
-        body_format: str | NotifyFormat = NotifyFormat.TEXT,
+        notify_type: str | NotifyType | _UnsetType = _UNSET,
+        body_format: str | NotifyFormat | None | _UnsetType = _UNSET,
     ) -> None:
-        """Send a single notification with all accumulated logs."""
+        """
+        Send a single notification with all accumulated logs.
+
+        ``notify_type`` and ``body_format`` fall back to the instance attributes (set in
+        ``__init__`` or reassigned directly) when omitted, so the automatic flush,
+        cleanup, and exception paths honour them too. ``None`` is a meaningful value for
+        ``body_format`` (it selects the preformatted-HTML default below), so the sentinel
+        ``_UNSET`` — not ``None`` — marks "argument not supplied".
+
+        With ``body_format=None`` the logs are delivered as a preformatted HTML ``<pre>``
+        block so whitespace survives verbatim. Pass an explicit format
+        (e.g. ``NotifyFormat.TEXT`` / ``MARKDOWN`` / ``HTML``) to override.
+        """
+        if isinstance(notify_type, _UnsetType):
+            notify_type = self.notify_type
+        if isinstance(body_format, _UnsetType):
+            body_format = self.body_format
+
         if not self.buffer:
             logger.trace("No logs to send")
             return
@@ -396,9 +433,18 @@ class Appriser:
         # Format the buffered logs into a single message
         message = "".join(self.buffer).replace("\r", "")
 
+        # Default path: deliver the logs as a preformatted HTML block. apprise's TEXT->HTML
+        # conversion escapes every space to &nbsp; (apprise.URLBase.escape_html), which mangles
+        # copy-pasted shell commands and indented tracebacks in the HTML alternative most mail
+        # clients display. A <pre> block preserves whitespace verbatim and stops Markdown from
+        # interpreting traceback tokens (e.g. __init__, *args). An explicit body_format opts out.
+        body, resolved_format = message, body_format
+        if resolved_format is None:
+            body, resolved_format = f"<pre>{html.escape(message)}</pre>", NotifyFormat.HTML
+
         try:
             if message and self.apprise_obj.notify(
-                title=title, notify_type=notify_type, body=message, body_format=body_format
+                title=title, notify_type=notify_type, body=body, body_format=resolved_format
             ):
                 self.clear()  # Clear the buffer after sending
         except BaseException as e:

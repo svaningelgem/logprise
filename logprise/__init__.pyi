@@ -11,6 +11,10 @@ __all__: list[str] = ["appriser", "logger"]
 
 # Type definitions
 
+class _UnsetType: ...
+
+_UNSET: _UnsetType
+
 class InterceptHandler(logging.Handler):
     LOGGING_FILENAMES: ClassVar[set[str]]
     CURRENT_FILENAME: ClassVar[str]
@@ -24,6 +28,8 @@ class Appriser:
     recursion_depth: int = ...
     flush_interval: int | float = 3600
     apprise_trigger_level: ClassVar[str] = "ERROR"
+    notify_type: str | apprise.NotifyType
+    body_format: str | NotifyFormat | None
 
     def __init__(
         self,
@@ -31,6 +37,8 @@ class Appriser:
         apprise_trigger_level: int | str | loguru.Level = "ERROR",
         recursion_depth: int = ...,
         flush_interval: float = 3600,
+        notify_type: str | apprise.NotifyType = ...,
+        body_format: str | NotifyFormat | None = ...,
     ) -> None: ...
     def install(self) -> None: ...
     def add(
@@ -55,8 +63,8 @@ class Appriser:
     def send_notification(
         self,
         title: str = "Script Notifications",
-        notify_type: str | apprise.NotifyType = ...,
-        body_format: str | NotifyFormat = ...,
+        notify_type: str | apprise.NotifyType | _UnsetType = ...,
+        body_format: str | NotifyFormat | None | _UnsetType = ...,
     ) -> None: ...
 
 appriser: Appriser
