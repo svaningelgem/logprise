@@ -23,7 +23,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.10"
           cache: 'poetry'
@@ -65,7 +65,7 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'poetry'
