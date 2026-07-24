@@ -397,7 +397,7 @@ class Appriser:
         self,
         title: str = "Script Notifications",
         notify_type: str | NotifyType | _UnsetType = _UNSET,
-        body_format: str | NotifyFormat | None | _UnsetType = _UNSET,
+        body_format: str | NotifyFormat | _UnsetType | None = _UNSET,
     ) -> None:
         """
         Send a single notification with all accumulated logs.
