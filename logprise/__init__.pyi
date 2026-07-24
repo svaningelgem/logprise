@@ -64,7 +64,7 @@ class Appriser:
         self,
         title: str = "Script Notifications",
         notify_type: str | apprise.NotifyType | _UnsetType = ...,
-        body_format: str | NotifyFormat | None | _UnsetType = ...,
+        body_format: str | NotifyFormat | _UnsetType | None = ...,
     ) -> None: ...
 
 appriser: Appriser

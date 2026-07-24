@@ -20,7 +20,7 @@ import logging
 
 logger.error("Payment processing failed")  # You get notified
 logging.error("Database connection lost")  # Also notified (auto-intercepted)
-logger.warning("High memory usage")        # Silent (unless configured)
+logger.warning("High memory usage")  # Silent (unless configured)
 ```
 
 ## Installation
@@ -87,8 +87,8 @@ Control which log levels trigger notifications:
 from logprise import appriser
 
 appriser.notification_level = "WARNING"  # Notify on WARNING and above
-appriser.notification_level = "CRITICAL" # Only critical issues
-appriser.notification_level = 30         # Numeric levels work too
+appriser.notification_level = "CRITICAL"  # Only critical issues
+appriser.notification_level = 30  # Numeric levels work too
 ```
 
 Default is ERROR (30).
@@ -131,6 +131,7 @@ for item in large_dataset:
 from logprise import logger, appriser
 
 appriser.notification_level = "INFO"  # Get notified of completion too
+
 
 def daily_backup():
     logger.info("Backup started")
@@ -197,7 +198,7 @@ from apprise import NotifyType, NotifyFormat
 appriser.send_notification(
     title="Production Alert",
     notify_type=NotifyType.FAILURE,
-    body_format=NotifyFormat.MARKDOWN
+    body_format=NotifyFormat.MARKDOWN,
 )
 ```
 
