@@ -75,14 +75,19 @@ class InterceptHandler(logging.Handler):
         except ValueError:
             level = record.levelno
 
-        # Find caller from where originated the logged message
-        frame, depth = logging.currentframe(), 0
-        while self._should_ignore_this_frame(frame):
+        # Find the frame that made the logging call. Start from this very frame and count every
+        # frame skipped: loguru's depth=N means "N frames above the caller of log()", and that
+        # caller is emit() itself. logging.currentframe() is unsuitable as a start: it returns the
+        # frame 3 levels up on Python <= 3.10 but 1 level up on 3.11+, so a fixed offset is wrong
+        # on one of them and overshoots shallow stacks ("call stack is not deep enough").
+        frame, depth = inspect.currentframe(), 0
+        while frame is not None and self._should_ignore_this_frame(frame):
             frame = frame.f_back
             depth += 1
+        if frame is None:
+            depth = 0  # walked off the top (e.g. python -c): attribute to emit() rather than raise
 
-        # Get the actual logger name instead of 'logging'
-        logger_opt = logger.opt(depth=depth + 2, exception=record.exc_info)
+        logger_opt = logger.opt(depth=depth, exception=record.exc_info)
         logger_opt.log(level, record.getMessage())
 
 
