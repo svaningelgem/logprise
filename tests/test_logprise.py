@@ -232,18 +232,28 @@ def test_intercept_skips_setup_for_already_handled_logger():
 
 
 def test_install_leaves_root_level_alone():
-    """The apprise trigger level is a notification threshold, not the root logger's level (#170)."""
+    """The reproduction from issue #170, nearly verbatim: importing logprise must not reset the root
+    logger's level. The apprise trigger level is a notification threshold, not a log level.
+
+    The example configures the *global* root logger. ``force=True`` is needed here because logprise
+    is already imported in this process (so root already has a handler and a plain ``basicConfig``
+    would be a no-op), and the original root level is restored afterwards. The example also printed
+    ``propagate`` of the "demo" logger; logprise sets that to False by design once it intercepts a
+    logger, so it is not asserted.
+    """
     root = logging.getLogger()
     original_level = root.level
-    root.setLevel(logging.DEBUG)
+    seen: list[str] = []
+    logger.add(seen.append, level=0, format="{message}")
     try:
-        make_appriser()  # default trigger level is ERROR; root must stay at DEBUG
-        assert root.level == logging.DEBUG
+        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s %(name)s %(message)s", force=True)
+        logging.getLogger("demo").info("before")  # printed
 
-        seen: list[str] = []
-        logger.add(seen.append, level=0, format="{message}")
-        logging.getLogger("test.inherits.root").info("still logged")
-        assert any("still logged" in message for message in seen)
+        make_appriser()  # stands in for ``import logprise``, which runs install()
+
+        logging.getLogger("demo").info("after")  # was NOT printed
+        assert root.level == logging.DEBUG  # was 40 (ERROR)
+        assert any("after" in message for message in seen)
     finally:
         root.setLevel(original_level)
 
