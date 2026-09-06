@@ -1,38 +1,42 @@
-[tool.poetry]
+[project]
 name = "logprise"
 version = "1.0.1"
 description = "A package integrating loguru and apprise for logging and notifications"
-authors = ["Steven Van Ingelgem <steven@vaningelgem.be>"]
+authors = [{ name = "Steven Van Ingelgem", email = "steven@vaningelgem.be" }]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/svaningelgem/logprise"
-packages = [
-    { include = "logprise" }
+requires-python = ">=3.10"
+dependencies = [
+    "loguru",
+    "apprise",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.10"
-loguru = "*"
-apprise = "*"
-urllib3 = "<3"  # Because else poetry won't work anymore!
+[project.urls]
+Repository = "https://github.com/svaningelgem/logprise"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "*"
-# Coverage is run via `coverage run -m pytest`. The [toml] extra pulls in tomli
-# so coverage can read its [tool.coverage] config from pyproject.toml on Python
-# <= 3.10 (3.11+ uses stdlib tomllib). Once 3.10 support is dropped, the [toml]
-# extra is a no-op and `coverage = "*"` suffices.
-coverage = { extras = ["toml"], version = "*" }
-pytest-mock = "*"
-ruff = "*"
-mypy = "*"
-
-[tool.poetry.plugins."pytest11"]
+[project.entry-points.pytest11]
 logprise = "logprise.pytest_plugin"
 
+[dependency-groups]
+dev = [
+    "pytest",
+    # Coverage is run via `coverage run -m pytest`. The [toml] extra pulls in tomli
+    # so coverage can read its [tool.coverage] config from pyproject.toml on Python
+    # <= 3.10 (3.11+ uses stdlib tomllib). Once 3.10 support is dropped, the [toml]
+    # extra is a no-op and "coverage" suffices.
+    "coverage[toml]",
+    "pytest-mock",
+    "ruff",
+    "mypy",
+]
+
 [build-system]
-requires = ["poetry-core>=2.3.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The package lives at the repository root, not under src/.
+module-root = ""
 
 [tool.ruff.lint]
 # Enable pycodestyle ('E'), pyflakes ('F'), pylint ('PL'), isort ('I'), pep8-naming ('N'),

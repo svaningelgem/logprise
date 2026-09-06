@@ -228,8 +228,8 @@ This works for logs from `logprise.logger`, from the standard `logging` module, 
 ```bash
 git clone https://github.com/svaningelgem/logprise.git
 cd logprise
-poetry install
-poetry run pytest
+uv sync
+uv run pytest
 ```
 
 Contributions welcome via pull requests.

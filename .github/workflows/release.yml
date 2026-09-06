@@ -20,20 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
+      - name: Install uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'poetry'
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: uv sync --locked
 
       - name: Set version from tag
         run: |
@@ -41,27 +34,27 @@ jobs:
           VERSION=${VERSION#v}              # Remove 'v' prefix if present
           VERSION=${VERSION#V}              # Remove 'V' prefix if present
           echo "Setting version to $VERSION"
-          poetry version $VERSION
+          uv version $VERSION
 
       - name: Run ruff format check
         if: always()
-        run: poetry run ruff format --check --diff .
+        run: uv run ruff format --check --diff .
 
       - name: Run ruff lint check
         if: always()
-        run: poetry run ruff check --diff .
+        run: uv run ruff check --diff .
 
       - name: Run consistency checks between stub & module
         if: always()
         env:
           PYTHONPATH: "."
-        run: poetry run stubtest ${{ github.event.repository.name }}
+        run: uv run stubtest ${{ github.event.repository.name }}
 
       - name: Running mypy
         if: always()
         env:
           PYTHONPATH: "."
-        run: poetry run mypy .
+        run: uv run mypy .
 
       - name: Run tests with coverage
         if: always()
@@ -69,8 +62,8 @@ jobs:
         # imports the package and its pytest plugin, capturing their module-level
         # definitions too.
         run: |
-          poetry run coverage run -m pytest
-          poetry run coverage xml
+          uv run coverage run -m pytest
+          uv run coverage xml
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v7
@@ -80,7 +73,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Build packages
-        run: poetry build
+        run: uv build
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
