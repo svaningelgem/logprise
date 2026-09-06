@@ -5,7 +5,16 @@ description = "A package integrating loguru and apprise for logging and notifica
 authors = [{ name = "Steven Van Ingelgem", email = "steven@vaningelgem.be" }]
 license = "MIT"
 readme = "README.md"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "loguru",
     "apprise",
