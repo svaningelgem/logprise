@@ -166,7 +166,7 @@ logger.error("Error from loguru")
 
 ## How It Works
 
-1. **Automatic interception:** Logprise intercepts both loguru and standard library `logging`, redirecting all logs through a unified interface. The root logger's level is left as you configured it, so `logging.basicConfig(level=...)` keeps deciding which standard `logging` records get through
+1. **Automatic interception:** Logprise intercepts both loguru and standard library `logging`, redirecting all logs through a unified interface. Logprise never changes the root logger's level. Set it before the import, or afterwards with `logging.getLogger().setLevel(...)`; a plain `logging.basicConfig(level=...)` after the import is a no-op because the root logger already has a handler
 2. **Smart batching:** Messages accumulate until flush interval or program exit
 3. **Exception capture:** Uncaught exceptions are logged and trigger immediate notification
 4. **Multiple services:** Send to multiple notification services simultaneously
