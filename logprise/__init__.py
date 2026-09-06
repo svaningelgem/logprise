@@ -367,6 +367,11 @@ class Appriser:
         self.stop_periodic_flush()
 
         if not Appriser._exit_via_unhandled_exception:
+            # cleanup() runs from atexit, once the interpreter is shutting down and thread pools can
+            # no longer be created ("can't register atexit after shutdown"). apprise reaches for one
+            # when several targets are delivered at once, so force sequential delivery here (#166).
+            for server in self.apprise_obj:
+                server.asset.async_mode = False
             self.send_notification()
 
         sys.excepthook = self._original_excepthook
