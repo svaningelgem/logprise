@@ -231,6 +231,35 @@ def test_intercept_skips_setup_for_already_handled_logger():
     assert not any(isinstance(h, InterceptHandler) for h in already_handled.handlers)
 
 
+def test_install_leaves_root_level_alone():
+    """The apprise trigger level is a notification threshold, not the root logger's level (#170)."""
+    root = logging.getLogger()
+    original_level = root.level
+    root.setLevel(logging.DEBUG)
+    try:
+        make_appriser()  # default trigger level is ERROR; root must stay at DEBUG
+        assert root.level == logging.DEBUG
+
+        seen: list[str] = []
+        logger.add(seen.append, level=0, format="{message}")
+        logging.getLogger("test.inherits.root").info("still logged")
+        assert any("still logged" in message for message in seen)
+    finally:
+        root.setLevel(original_level)
+
+
+def test_intercept_setup_runs_once_per_logger():
+    """After the first call the guard trips, so later changes the host makes to the logger stick (#170)."""
+    make_appriser()
+    log = logging.getLogger("test.setup.once")
+    log.error("first call sets up interception")
+    assert log.propagate is False
+
+    log.propagate = True
+    log.error("second call must not undo the host's change")
+    assert log.propagate is True
+
+
 def test_install_is_idempotent(mocker):
     """A second install() is a no-op and does not re-run the global side effects."""
     appriser = make_appriser()  # installs once

@@ -172,7 +172,10 @@ class Appriser:
         self.apprise_obj.add(config)
 
     def _setup_interception_handler(self) -> None:
-        logging.basicConfig(handlers=[InterceptHandler()], level=self._notification_level, force=True)
+        # No level= here: the apprise trigger level is a notification threshold (see accumulate_log),
+        # not the level the host wants to log at. Passing it set the root logger to ERROR and silently
+        # dropped every record below it, for every logger without an explicit level (#170).
+        logging.basicConfig(handlers=[InterceptHandler()], force=True)
 
         original_method = logging.Logger._log
 
@@ -189,7 +192,7 @@ class Appriser:
                     if isinstance(handler, StreamHandler):
                         self.removeHandler(handler)
                 self.propagate = False
-                self._added_intercept_handler = True
+                self._has_been_handled_by_interceptor = True
 
             return original_method(self, *args, **kwargs)
 
