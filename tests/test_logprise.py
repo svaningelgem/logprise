@@ -3,8 +3,8 @@ import re
 from logging import NullHandler, StreamHandler
 
 import pytest
-from apprise import NotifyFormat, NotifyType
-from conftest import make_appriser
+from apprise import Apprise, NotifyFormat, NotifyType
+from conftest import NoOpNotifier, make_appriser
 from loguru import logger
 
 from logprise import InterceptHandler
@@ -77,7 +77,7 @@ def test_html_opt_in_sends_preformatted_block_preserving_whitespace(mocker, appr
     appriser, _noop = apprise_noop
     appriser.body_format = None  # opt into the preformatted-HTML path
     appriser.buffer.append("run:  pkill -f my_worker.py")  # double space + command spaces must survive intact
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()
 
@@ -94,7 +94,7 @@ def test_html_opt_in_escapes_markup_but_leaves_spaces_and_underscores(mocker, ap
     appriser, _noop = apprise_noop
     appriser.body_format = None  # opt into the preformatted-HTML path
     appriser.buffer.append("    obj.__init__() & <x>")  # 4-space indent, dunder, &, angle brackets
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()
 
@@ -105,7 +105,7 @@ def test_explicit_body_format_is_not_wrapped(mocker, apprise_noop):
     """An explicit body_format is honored as-is — the <pre> wrapping is only the None default."""
     appriser, _noop = apprise_noop
     appriser.buffer.append("plain text")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification(body_format=NotifyFormat.TEXT)
 
@@ -119,7 +119,7 @@ def test_instance_body_format_attribute_is_used_when_arg_omitted(mocker, apprise
     appriser, _noop = apprise_noop
     appriser.body_format = NotifyFormat.TEXT  # reconfigure the default rendering
     appriser.buffer.append("plain text")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()  # omit body_format -> falls back to the instance attribute
 
@@ -133,7 +133,7 @@ def test_explicit_none_forces_html_over_instance_attribute(mocker, apprise_noop)
     appriser, _noop = apprise_noop
     appriser.body_format = NotifyFormat.TEXT  # instance default is plain text...
     appriser.buffer.append("run:  pkill -f x")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification(body_format=None)  # ...but None overrides it for this call
 
@@ -147,7 +147,7 @@ def test_instance_notify_type_attribute_is_used_when_arg_omitted(mocker, apprise
     appriser, _noop = apprise_noop
     appriser.notify_type = NotifyType.FAILURE
     appriser.buffer.append("boom")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()
 
@@ -183,7 +183,7 @@ def test_send_notification_discards_buffer_when_no_services(mocker):
     logger.error("Boom")
     assert len(appriser.buffer) == 1
 
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
     appriser.send_notification()
 
     mock_notify.assert_not_called()
@@ -212,10 +212,29 @@ def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, appri
     logger.error("Boom")
     assert len(appriser.buffer) == 1
 
-    mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)
+    mocker.patch.object(Apprise, "notify", return_value=False)
     appriser.send_notification()
 
     assert len(appriser.buffer) == 1  # not cleared, since the send did not succeed
+
+
+def test_partial_delivery_clears_buffer(mocker, apprise_noop):
+    """One unreachable target must not keep the buffer, or the healthy targets get the whole backlog
+    re-sent on every flush (#167)."""
+    appriser, healthy = apprise_noop
+    broken = NoOpNotifier()
+    mocker.patch.object(broken, "send", return_value=False)
+    appriser.add(broken)
+
+    logger.error("first error")
+    appriser.send_notification()
+    assert len(healthy.calls) == 1
+    assert appriser.buffer == []
+
+    logger.error("second error")
+    appriser.send_notification()
+    assert len(healthy.calls) == 2
+    assert "first error" not in healthy.calls[-1]["body"]
 
 
 def test_intercept_skips_setup_for_already_handled_logger():
@@ -393,7 +412,7 @@ def test_send_notification_parameters(mocker, apprise_noop):
     appriser, _noop = apprise_noop
     appriser.buffer.append(test_message)
 
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification(title=custom_title, notify_type=custom_type, body_format=custom_format)
 
@@ -429,7 +448,7 @@ def test_notification_parameter_types(mocker, apprise_noop, notify_type_param, n
     appriser, _noop = apprise_noop
     appriser.buffer.append(test_message)
 
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     # Call with the parametrized values
     appriser.send_notification(title=custom_title, notify_type=notify_type_param, body_format=notify_format_param)

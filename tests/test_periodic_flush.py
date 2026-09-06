@@ -4,6 +4,7 @@ import time
 from threading import ExceptHookArgs
 from unittest.mock import MagicMock
 
+from apprise import Apprise
 from conftest import make_appriser
 
 from logprise import logger
@@ -247,7 +248,7 @@ def test_notify_failure_preserves_buffer(mocker):
     appriser = make_appriser(add_noop=True)
 
     # Mock apprise_obj.notify to return False (failure)
-    mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)
+    mocker.patch.object(Apprise, "notify", return_value=False)
 
     # Add test message to buffer
     logger.error("Test message that should remain in buffer")

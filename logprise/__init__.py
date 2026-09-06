@@ -442,13 +442,23 @@ class Appriser:
         if resolved_format is None:
             body, resolved_format = f"<pre>{html.escape(message)}</pre>", NotifyFormat.HTML
 
-        try:
-            if message and self.apprise_obj.notify(
-                title=title, notify_type=notify_type, body=body, body_format=resolved_format
-            ):
-                self.clear()  # Clear the buffer after sending
-        except BaseException as e:
-            logger.warning(f"Failed to send notification: {e}")
+        # Deliver to each target separately. Apprise.notify() collapses every target into a single
+        # bool, so one unreachable target would keep the buffer forever and re-send the whole backlog
+        # to the healthy targets on every flush (#167). Clear as soon as any target took the batch;
+        # a batch nobody could deliver is kept for the next attempt.
+        delivered = False
+        for server in self.apprise_obj:
+            try:
+                delivered = (
+                    apprise.Apprise(servers=server).notify(
+                        title=title, notify_type=notify_type, body=body, body_format=resolved_format
+                    )
+                    or delivered
+                )
+            except BaseException as e:
+                logger.warning(f"Failed to send notification: {e}")
+        if delivered:
+            self.clear()
 
 
 appriser = Appriser()
