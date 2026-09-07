@@ -72,7 +72,9 @@ def test_bad_format_args_do_not_raise_out_of_the_logging_call(mocker: pytest_moc
     handler, instead of unwinding through the host's logging.error(...)."""
     make_appriser()
     handle_error = mocker.patch.object(InterceptHandler, "handleError")
+    log = logging.getLogger("test.badformat")
+    log.propagate = False  # pytest's own capture handler on root re-raises logging errors by design
 
-    logging.getLogger("test.badformat").error("value: %s %s", 1)  # noqa: PLE1206  (must not raise)
+    log.error("value: %s %s", 1)  # noqa: PLE1206  (must not raise)
 
     handle_error.assert_called_once()
