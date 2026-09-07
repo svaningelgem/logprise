@@ -2,8 +2,9 @@ import sys
 
 import loguru
 import loguru._simple_sinks
+from conftest import make_appriser
 
-from logprise import logger
+from logprise import appriser, logger
 
 
 def _accumulator_handler_ids() -> list[int]:
@@ -48,3 +49,15 @@ def test_prevent_removal_of_accumulator_not_removing_it():
 
     assert len(core.handlers) == before
     assert _accumulator_handler_ids() == accumulator_ids  # Nothing should have changed!
+
+
+def test_every_installed_appriser_survives_logger_remove():
+    """logger.remove() used to re-add only the most recently installed Appriser's sink: the module-global
+    appriser then buffered nothing for the rest of the process."""
+    second = make_appriser()
+
+    logger.remove()
+    logger.error("seen by both")
+
+    assert [m.record["message"] for m in appriser.buffer] == ["seen by both"]
+    assert [m.record["message"] for m in second.buffer] == ["seen by both"]
