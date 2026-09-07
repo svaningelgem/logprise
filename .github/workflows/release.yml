@@ -54,6 +54,8 @@ jobs:
         if: always()
         env:
           PYTHONPATH: "."
+        # pyproject excludes .pyi from discovery so this checks the implementation, not the stub
+        # that would otherwise shadow it; stubtest above covers the stub.
         run: uv run mypy .
 
       - name: Run tests with coverage
