@@ -1,10 +1,11 @@
+import io
 import logging
 import re
 from logging import NullHandler, StreamHandler
 
 import pytest
-from apprise import NotifyFormat, NotifyType
-from conftest import make_appriser
+from apprise import Apprise, NotifyFormat, NotifyType
+from conftest import NoOpNotifier, make_appriser
 from loguru import logger
 
 from logprise import InterceptHandler
@@ -77,7 +78,7 @@ def test_html_opt_in_sends_preformatted_block_preserving_whitespace(mocker, appr
     appriser, _noop = apprise_noop
     appriser.body_format = None  # opt into the preformatted-HTML path
     appriser.buffer.append("run:  pkill -f my_worker.py")  # double space + command spaces must survive intact
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()
 
@@ -94,7 +95,7 @@ def test_html_opt_in_escapes_markup_but_leaves_spaces_and_underscores(mocker, ap
     appriser, _noop = apprise_noop
     appriser.body_format = None  # opt into the preformatted-HTML path
     appriser.buffer.append("    obj.__init__() & <x>")  # 4-space indent, dunder, &, angle brackets
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()
 
@@ -105,7 +106,7 @@ def test_explicit_body_format_is_not_wrapped(mocker, apprise_noop):
     """An explicit body_format is honored as-is — the <pre> wrapping is only the None default."""
     appriser, _noop = apprise_noop
     appriser.buffer.append("plain text")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification(body_format=NotifyFormat.TEXT)
 
@@ -119,7 +120,7 @@ def test_instance_body_format_attribute_is_used_when_arg_omitted(mocker, apprise
     appriser, _noop = apprise_noop
     appriser.body_format = NotifyFormat.TEXT  # reconfigure the default rendering
     appriser.buffer.append("plain text")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()  # omit body_format -> falls back to the instance attribute
 
@@ -133,7 +134,7 @@ def test_explicit_none_forces_html_over_instance_attribute(mocker, apprise_noop)
     appriser, _noop = apprise_noop
     appriser.body_format = NotifyFormat.TEXT  # instance default is plain text...
     appriser.buffer.append("run:  pkill -f x")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification(body_format=None)  # ...but None overrides it for this call
 
@@ -147,7 +148,7 @@ def test_instance_notify_type_attribute_is_used_when_arg_omitted(mocker, apprise
     appriser, _noop = apprise_noop
     appriser.notify_type = NotifyType.FAILURE
     appriser.buffer.append("boom")
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification()
 
@@ -183,7 +184,7 @@ def test_send_notification_discards_buffer_when_no_services(mocker):
     logger.error("Boom")
     assert len(appriser.buffer) == 1
 
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
     appriser.send_notification()
 
     mock_notify.assert_not_called()
@@ -205,6 +206,50 @@ def test_clear_discards_buffer_but_keeps_services(apprise_noop):
     assert len(appriser.apprise_obj) == 1  # services are preserved
 
 
+def test_partial_delivery_clears_buffer(mocker, apprise_noop):
+    """One unreachable target must not keep the buffer, or the healthy targets get the whole backlog
+    re-sent on every flush (#167)."""
+    appriser, healthy = apprise_noop
+    broken = NoOpNotifier()
+    mocker.patch.object(broken, "send", return_value=False)
+    appriser.add(broken)
+
+    logger.error("first error")
+    appriser.send_notification()
+    assert len(healthy.calls) == 1
+    assert appriser.buffer == []
+
+    logger.error("second error")
+    appriser.send_notification()
+    assert len(healthy.calls) == 2
+    assert "first error" not in healthy.calls[-1]["body"]
+
+
+def test_records_logged_during_delivery_survive_the_send(mocker, apprise_noop):
+    """A record that arrives while a batch is in flight belongs to the next batch, not the bin.
+
+    A target's own error logging is intercepted straight back into the buffer during notify(),
+    and the flush thread runs concurrently with the host: neither may be wiped by the send.
+    """
+    appriser, healthy = apprise_noop
+
+    def send_and_log_a_new_error(body, title="", **kwargs):
+        healthy.calls.append({"title": title, "body": body})
+        logging.getLogger("net").error("connection reset during delivery")
+        return True
+
+    mocker.patch.object(healthy, "send", side_effect=send_and_log_a_new_error)
+
+    logger.error("first real error")
+    appriser.send_notification()
+
+    assert len(healthy.calls) == 1
+    assert "first real error" in healthy.calls[0]["body"]
+    assert "connection reset" not in healthy.calls[0]["body"]
+    assert len(appriser.buffer) == 1
+    assert "connection reset during delivery" in appriser.buffer[0]
+
+
 def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, apprise_noop):
     """When notify() reports failure, the buffer is kept for the next attempt."""
     appriser, _ = apprise_noop
@@ -212,23 +257,142 @@ def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, appri
     logger.error("Boom")
     assert len(appriser.buffer) == 1
 
-    mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)
+    mocker.patch.object(Apprise, "notify", return_value=False)
     appriser.send_notification()
 
     assert len(appriser.buffer) == 1  # not cleared, since the send did not succeed
 
 
-def test_intercept_skips_setup_for_already_handled_logger():
-    """A logger already flagged as handled does not get the interceptor re-attached."""
+def test_flagged_logger_gets_the_interceptor_but_keeps_its_console_handler():
+    """The once-per-logger flag guards only the console-handler strip. A logger flagged as handled still
+    gets an InterceptHandler re-attached on every call (logging.config may have removed it), while a
+    console handler it holds is left alone."""
     make_appriser()  # patches logging.Logger._log
 
-    already_handled = logging.getLogger("test.already.handled")
-    already_handled._has_been_handled_by_interceptor = True
+    flagged = logging.getLogger("test.already.handled")
+    flagged._has_been_handled_by_interceptor = True
+    console = StreamHandler()
+    flagged.addHandler(console)
+    try:
+        flagged.error("message")
 
-    # Routes through the patched _log and takes the "skip setup" branch.
-    already_handled.error("message")
+        assert any(isinstance(h, InterceptHandler) for h in flagged.handlers)
+        assert console in flagged.handlers
+    finally:
+        flagged.removeHandler(console)
 
-    assert not any(isinstance(h, InterceptHandler) for h in already_handled.handlers)
+
+def test_interceptor_is_reattached_after_the_host_replaces_handlers():
+    """logging.config.dictConfig/fileConfig replace a logger's handlers wholesale and may switch off
+    propagation. After such a reconfiguration the next call must re-attach the interceptor, otherwise
+    the logger is silently lost to loguru for the rest of the process."""
+    make_appriser()
+    seen: list[str] = []
+    logger.add(seen.append, level=0, format="{message}")
+    log = logging.getLogger("test.reattach")
+    log.error("first call attaches the interceptor")
+
+    # What a dictConfig entry with its own handler and ``propagate: False`` does to the logger.
+    log.handlers = [NullHandler()]
+    log.propagate = False
+    log.error("second call must still reach loguru")
+
+    assert any("second call must still reach loguru" in message for message in seen)
+
+
+def test_file_handler_on_a_logger_survives_interception(tmp_path):
+    """Only console handlers are replaced by loguru's output; the host's file handlers keep working."""
+    log = logging.getLogger("test.filehandler")
+    handler = logging.FileHandler(tmp_path / "app.log")
+    log.addHandler(handler)
+    try:
+        make_appriser()
+        log.error("kept in the file")
+        handler.flush()
+
+        assert handler in log.handlers
+        assert "kept in the file" in (tmp_path / "app.log").read_text()
+    finally:
+        log.removeHandler(handler)
+        handler.close()
+
+
+def test_root_file_handler_is_kept_open_and_still_receives_child_records(tmp_path):
+    """install() must not close or remove the host's root handlers (basicConfig(force=True) did both),
+    and propagation is left as configured so a child logger's records still reach them."""
+    root = logging.getLogger()
+    handler = logging.FileHandler(tmp_path / "root.log")
+    root.addHandler(handler)
+    try:
+        make_appriser()
+        assert handler in root.handlers
+        assert handler.stream is not None  # not closed
+
+        logging.getLogger("test.child.of.root").error("propagated to the root file")
+        handler.flush()
+        assert "propagated to the root file" in (tmp_path / "root.log").read_text()
+    finally:
+        root.removeHandler(handler)
+        handler.close()
+
+
+def test_capture_handler_on_root_survives_root_logging():
+    """pytest's LogCaptureHandler is a StreamHandler over an in-memory stream; only handlers writing to
+    the process console are stripped, so capture handlers keep seeing root records."""
+    root = logging.getLogger()
+    handler = StreamHandler(io.StringIO())
+    root.addHandler(handler)
+    try:
+        make_appriser()
+        logging.error("logged on the root logger")
+
+        assert handler in root.handlers
+        assert "logged on the root logger" in handler.stream.getvalue()
+    finally:
+        root.removeHandler(handler)
+
+
+def test_install_leaves_root_level_alone():
+    """The reproduction from issue #170, nearly verbatim: importing logprise must not reset the root
+    logger's level. The apprise trigger level is a notification threshold, not a log level.
+
+    The example configures the *global* root logger. ``force=True`` is needed here because logprise
+    is already imported in this process (so root already has a handler and a plain ``basicConfig``
+    would be a no-op), and the original root level is restored afterwards. The example also printed
+    ``propagate`` of the "demo" logger; logprise leaves propagation as the host configured it, so
+    there is nothing to assert.
+    """
+    root = logging.getLogger()
+    original_level = root.level
+    seen: list[str] = []
+    logger.add(seen.append, level=0, format="{message}")
+    try:
+        logging.basicConfig(level=logging.DEBUG, format="%(levelname)s %(name)s %(message)s", force=True)
+        logging.getLogger("demo").info("before")  # printed
+
+        make_appriser()  # stands in for ``import logprise``, which runs install()
+
+        logging.getLogger("demo").info("after")  # was NOT printed
+        assert root.level == logging.DEBUG  # was 40 (ERROR)
+        assert any("after" in message for message in seen)
+    finally:
+        root.setLevel(original_level)
+
+
+def test_console_handler_strip_runs_once_per_logger():
+    """The console-handler strip runs on a logger's first call only, so a console handler the host adds
+    afterwards sticks (#170)."""
+    make_appriser()
+    log = logging.getLogger("test.setup.once")
+    log.error("first call strips console handlers")
+
+    console = StreamHandler()
+    log.addHandler(console)
+    try:
+        log.error("second call must not undo the host's change")
+        assert console in log.handlers
+    finally:
+        log.removeHandler(console)
 
 
 def test_install_is_idempotent(mocker):
@@ -393,7 +557,7 @@ def test_send_notification_parameters(mocker, apprise_noop):
     appriser, _noop = apprise_noop
     appriser.buffer.append(test_message)
 
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     appriser.send_notification(title=custom_title, notify_type=custom_type, body_format=custom_format)
 
@@ -429,7 +593,7 @@ def test_notification_parameter_types(mocker, apprise_noop, notify_type_param, n
     appriser, _noop = apprise_noop
     appriser.buffer.append(test_message)
 
-    mock_notify = mocker.patch.object(appriser.apprise_obj, "notify")
+    mock_notify = mocker.patch.object(Apprise, "notify")
 
     # Call with the parametrized values
     appriser.send_notification(title=custom_title, notify_type=notify_type_param, body_format=notify_format_param)

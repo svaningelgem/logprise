@@ -1,6 +1,8 @@
 import logging
 
 import pytest_mock
+from conftest import make_appriser
+from loguru import logger
 
 from logprise import InterceptHandler
 
@@ -34,3 +36,45 @@ def test_duplicate_emitted_record(mocker: pytest_mock.MockerFixture):
     handler.emit(record)
 
     assert get_message.call_count == 1  # STILL 1!
+
+
+def test_intercepted_record_points_at_the_stdlib_call_site():
+    """loguru's depth must land on the frame that called logging, not two frames above it."""
+    make_appriser()
+    records: list[dict] = []
+    logger.add(lambda message: records.append(message.record), level=0)
+
+    def call_site() -> None:
+        logging.getLogger("test.depth").error("where was I called from?")
+
+    call_site()
+
+    assert records[-1]["function"] == "call_site"
+    assert records[-1]["name"] == __name__
+    assert records[-1]["extra"]["_stdlib_logger"] == "test.depth"
+
+
+def test_intercept_falls_back_to_the_handler_when_every_frame_is_ignored(mocker: pytest_mock.MockerFixture):
+    """If the walk runs off the top of the stack (python -c skips its <string> module frame), the record is
+    attributed to the handler instead of making loguru raise "call stack is not deep enough" into the host."""
+    make_appriser()
+    records: list[dict] = []
+    logger.add(lambda message: records.append(message.record), level=0)
+    mocker.patch.object(InterceptHandler, "_should_ignore_this_frame", return_value=True)
+
+    logging.getLogger("test.depth").error("no attributable frame")
+
+    assert records[-1]["function"] == "_forward"
+
+
+def test_bad_format_args_do_not_raise_out_of_the_logging_call(mocker: pytest_mock.MockerFixture):
+    """logging never raises from a logging call: a bad %-format goes to handleError, as with every stdlib
+    handler, instead of unwinding through the host's logging.error(...)."""
+    make_appriser()
+    handle_error = mocker.patch.object(InterceptHandler, "handleError")
+    log = logging.getLogger("test.badformat")
+    log.propagate = False  # pytest's own capture handler on root re-raises logging errors by design
+
+    log.error("value: %s %s", 1)  # noqa: PLE1206  (must not raise)
+
+    handle_error.assert_called_once()

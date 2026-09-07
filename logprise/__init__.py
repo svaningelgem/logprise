@@ -41,6 +41,36 @@ class _UnsetType: ...
 _UNSET: Final = _UnsetType()
 
 
+def _is_console_handler(handler: logging.Handler) -> bool:
+    """A StreamHandler writing to the process console: exactly what loguru's own stderr sink replaces.
+
+    File handlers (StreamHandler subclasses over a file) and capture handlers over in-memory streams,
+    such as pytest's, are the host's business and stay.
+    """
+    stream = getattr(handler, "stream", None)
+    return (
+        isinstance(handler, StreamHandler)
+        and stream is not None
+        and stream in (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+    )
+
+
+def _strip_console_handlers(start: logging.Logger) -> None:
+    """Remove console handlers from ``start`` and every ancestor up to the root logger."""
+    current: logging.Logger | None = start
+    while current is not None:
+        for handler in current.handlers.copy():
+            if _is_console_handler(handler):
+                current.removeHandler(handler)
+        current = current.parent
+
+
+def _ensure_intercepted(target: logging.Logger) -> None:
+    """Attach an InterceptHandler to ``target`` unless it already has one."""
+    if not any(isinstance(h, InterceptHandler) for h in target.handlers):
+        target.addHandler(InterceptHandler())
+
+
 # Intercept standard logging calls and forward them to loguru
 class InterceptHandler(logging.Handler):
     LOGGING_FILENAMES: ClassVar[set[str]] = {
@@ -69,20 +99,36 @@ class InterceptHandler(logging.Handler):
         # Mark record as handled to prevent duplicate processing
         record._has_been_handled_by_interceptor = True
 
+        # logging promises never to raise out of a logging call: every stdlib handler routes a failure
+        # in its own emit() to handleError(). Keep that promise here too, otherwise a bad %-format in any
+        # library unwinds through the host's logging.error(...) call instead of printing a logging error.
+        try:
+            self._forward(record)
+        except Exception:
+            self.handleError(record)
+
+    def _forward(self, record: logging.LogRecord) -> None:
         # Get corresponding Loguru level if it exists
         try:
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
 
-        # Find caller from where originated the logged message
-        frame, depth = logging.currentframe(), 0
-        while self._should_ignore_this_frame(frame):
+        # Find the frame that made the logging call. Start from this very frame and count every
+        # frame skipped: loguru's depth=N means "N frames above the caller of log()", and that
+        # caller is this method. logging.currentframe() is unsuitable as a start: it returns the
+        # frame 3 levels up on Python <= 3.10 but 1 level up on 3.11+, so a fixed offset is wrong
+        # on one of them and overshoots shallow stacks ("call stack is not deep enough").
+        frame, depth = inspect.currentframe(), 0
+        while frame is not None and self._should_ignore_this_frame(frame):
             frame = frame.f_back
             depth += 1
+        if frame is None:
+            depth = 0  # walked off the top (e.g. python -c): attribute to this handler rather than raise
 
-        # Get the actual logger name instead of 'logging'
-        logger_opt = logger.opt(depth=depth + 2, exception=record.exc_info)
+        # Carry the originating stdlib logger name: sinks (the pytest plugin, user sinks) can then tell a
+        # forwarded record from a native loguru call and keep the name the host's filters key on.
+        logger_opt = logger.bind(_stdlib_logger=record.name).opt(depth=depth, exception=record.exc_info)
         logger_opt.log(level, record.getMessage())
 
 
@@ -172,7 +218,13 @@ class Appriser:
         self.apprise_obj.add(config)
 
     def _setup_interception_handler(self) -> None:
-        logging.basicConfig(handlers=[InterceptHandler()], level=self._notification_level, force=True)
+        # The root logger keeps everything the host gave it: its level (the apprise trigger level is a
+        # notification threshold, not a log level; passing it as basicConfig(level=...) once dropped every
+        # record below ERROR, #170) and its non-console handlers. basicConfig(force=True) would close and
+        # remove a host FileHandler; only console handlers go, since loguru's own stderr sink replaces them.
+        root = logging.getLogger()
+        _strip_console_handlers(root)
+        _ensure_intercepted(root)
 
         original_method = logging.Logger._log
 
@@ -182,14 +234,17 @@ class Appriser:
 
         @functools.wraps(original_method)
         def new_log_method(self: logging.Logger, *args: object, **kwargs: object) -> None:
+            # Every call: logging.config.dictConfig/fileConfig replace a logger's handlers wholesale, so a
+            # handler attached only once would be gone for good. Re-attaching is cheap and keeps the
+            # logger intercepted however often the host reconfigures logging.
+            _ensure_intercepted(self)
+
+            # Once per logger: console handlers on it and its ancestors would print every record a second
+            # time next to loguru's output, so they go. Everything else (file handlers, capture handlers,
+            # propagation) is the host's and stays, and doing this once means later host changes stick.
             if not getattr(self, "_has_been_handled_by_interceptor", False):
-                if not any(isinstance(h, InterceptHandler) for h in self.handlers):
-                    self.addHandler(InterceptHandler())
-                for handler in self.handlers.copy():
-                    if isinstance(handler, StreamHandler):
-                        self.removeHandler(handler)
-                self.propagate = False
-                self._added_intercept_handler = True
+                self._has_been_handled_by_interceptor = True
+                _strip_console_handlers(self)
 
             return original_method(self, *args, **kwargs)
 
@@ -318,19 +373,25 @@ class Appriser:
                 self.stop_periodic_flush()
                 self._start_periodic_flush()
 
-    def _periodic_flush(self) -> None:
-        """Periodically flush log buffer."""
-        while not self._stop_event.is_set():
+    def _periodic_flush(self, stop_event: threading.Event | None = None) -> None:
+        """Periodically flush the log buffer until ``stop_event`` (this thread's own) is set."""
+        stop_event = stop_event or self._stop_event
+        while not stop_event.is_set():
             # Wait for the specified interval but allow early termination
-            if self._stop_event.wait(self._flush_interval):
+            if stop_event.wait(self._flush_interval):
                 break
 
             self.send_notification()
 
     def _start_periodic_flush(self) -> None:
         """Start the periodic flush thread."""
-        self._stop_event.clear()
-        self._flush_thread = threading.Thread(target=self._periodic_flush, daemon=True, name="logprise-flush")
+        # Every thread gets its own stop event. Reusing one and clearing it here revived a previous
+        # thread that had been told to stop but was still inside a slow send when the join timed out,
+        # leaving two threads flushing the same buffer.
+        self._stop_event = threading.Event()
+        self._flush_thread = threading.Thread(
+            target=self._periodic_flush, args=(self._stop_event,), daemon=True, name="logprise-flush"
+        )
         self._flush_thread.start()
 
     def add(
@@ -421,17 +482,21 @@ class Appriser:
             logger.trace("No logs to send")
             return
 
+        # Detach the batch before delivering. Records that arrive while a send is in flight (the flush
+        # thread runs concurrently with the host, and a target's own error logging is intercepted
+        # straight back here) then land in the fresh buffer instead of being wiped after the send.
+        batch, self.buffer = self.buffer, []
+
         if not len(self.apprise_obj):
             # No services configured: skip notifying so apprise doesn't log
             # "There are no service(s) to notify" for every flush. Drop the
-            # buffered logs too -- services should have been configured by now,
+            # detached batch too -- services should have been configured by now,
             # and there is nowhere to deliver them, so keeping them only leaks memory.
             logger.trace("No notification services configured; discarding buffered logs")
-            self.clear()
             return
 
         # Format the buffered logs into a single message
-        message = "".join(self.buffer).replace("\r", "")
+        message = "".join(batch).replace("\r", "")
 
         # Default path: deliver the logs as a preformatted HTML block. apprise's TEXT->HTML
         # conversion escapes every space to &nbsp; (apprise.URLBase.escape_html), which mangles
@@ -442,13 +507,23 @@ class Appriser:
         if resolved_format is None:
             body, resolved_format = f"<pre>{html.escape(message)}</pre>", NotifyFormat.HTML
 
-        try:
-            if message and self.apprise_obj.notify(
-                title=title, notify_type=notify_type, body=body, body_format=resolved_format
-            ):
-                self.clear()  # Clear the buffer after sending
-        except BaseException as e:
-            logger.warning(f"Failed to send notification: {e}")
+        # Deliver to each target separately. Apprise.notify() collapses every target into a single
+        # bool, so one unreachable target would keep the buffer forever and re-send the whole backlog
+        # to the healthy targets on every flush (#167). The batch is done as soon as any target took
+        # it; a batch nobody could deliver goes back for the next attempt.
+        delivered = False
+        for server in self.apprise_obj:
+            try:
+                delivered = (
+                    apprise.Apprise(servers=server).notify(
+                        title=title, notify_type=notify_type, body=body, body_format=resolved_format
+                    )
+                    or delivered
+                )
+            except BaseException as e:
+                logger.warning(f"Failed to send notification: {e}")
+        if not delivered:
+            self.buffer[:0] = batch  # ahead of whatever accumulated meanwhile
 
 
 appriser = Appriser()
