@@ -161,7 +161,6 @@ def _remove_keeping_protected_sinks(*args: object, **kwargs: object) -> None:
 class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
 
-    _exit_via_unhandled_exception: ClassVar[bool] = False
     _original_excepthook: Callable[[type[BaseException], BaseException, types.TracebackType | None], None] = None
     _original_threading_excepthook: Callable[[threading.ExceptHookArgs], None] = None
 
@@ -308,11 +307,15 @@ class Appriser:
 
     @staticmethod
     def _is_method_in_stdlib(method: Callable) -> bool:
+        # A functools.partial has no module of its own: attribute lookup falls through to its type and
+        # answers "functools", which would make any host hook bound with partial look like the stdlib one.
+        while isinstance(method, partial):
+            method = method.func
         module = inspect.getmodule(method)
         if not module:
             return False
 
-        top_level = method.__module__.split(".", maxsplit=1)[0]
+        top_level = (getattr(method, "__module__", None) or "").split(".", maxsplit=1)[0]
 
         if top_level in sys.stdlib_module_names or top_level in Appriser._STDLIB_BACKPORTS:
             return True
@@ -345,8 +348,6 @@ class Appriser:
             f"Uncaught exception: {exc_type.__name__}: {exc_value}"
         )
 
-        Appriser._exit_via_unhandled_exception = True
-
         self.send_notification()
 
         if not self._is_method_in_stdlib(original_excepthook):
@@ -359,14 +360,14 @@ class Appriser:
         original_excepthook: Callable[[threading.ExceptHookArgs], None],
     ) -> None:
         """Handle uncaught exceptions by logging and sending notifications."""
-        logger.opt(exception=(args.exc_type, args.exc_value, args.exc_traceback)).error(
-            f"Uncaught exception in thread {args.thread.name if args.thread else get_ident()}:"
-            f" {args.exc_type.__name__}: {args.exc_value}"
-        )
+        # threading.excepthook silently ignores SystemExit: ending a thread with sys.exit() is not an error.
+        if args.exc_type is not SystemExit:
+            logger.opt(exception=(args.exc_type, args.exc_value, args.exc_traceback)).error(
+                f"Uncaught exception in thread {args.thread.name if args.thread else get_ident()}:"
+                f" {args.exc_type.__name__}: {args.exc_value}"
+            )
 
-        Appriser._exit_via_unhandled_exception = True
-
-        self.send_notification()
+            self.send_notification()
 
         if not self._is_method_in_stdlib(original_excepthook):
             original_excepthook(args)
@@ -433,10 +434,14 @@ class Appriser:
 
     def cleanup(self) -> None:
         """Clean up resources and send any pending notifications."""
+        if not self._installed:
+            return  # nothing was armed, so there is nothing to flush and no hooks of ours to restore
+
         self.stop_periodic_flush()
 
-        if not Appriser._exit_via_unhandled_exception:
-            self.send_notification()
+        # Always flush: a batch the exception hooks already delivered leaves an empty buffer (a no-op
+        # here), and one they could not deliver gets its retry.
+        self.send_notification()
 
         sys.excepthook = self._original_excepthook
         threading.excepthook = self._original_threading_excepthook
