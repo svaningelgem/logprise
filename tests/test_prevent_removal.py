@@ -4,7 +4,8 @@ import loguru
 import loguru._simple_sinks
 from conftest import make_appriser
 
-from logprise import _protected_sinks, _unprotect_sink, appriser, logger
+from logprise import appriser, logger
+from logprise._sinks import protected, unprotect
 
 
 def _accumulator_handler_ids() -> list[int]:
@@ -67,8 +68,8 @@ def test_unprotecting_a_sink_twice_is_a_no_op():
     """The harness may dispose an instance a test already disposed; the second unprotect must not raise."""
     second = make_appriser()
 
-    _unprotect_sink(second.accumulate_log)
-    _unprotect_sink(second.accumulate_log)
+    unprotect(second.accumulate_log)
+    unprotect(second.accumulate_log)
 
-    assert second.accumulate_log not in _protected_sinks
+    assert second.accumulate_log not in protected
     assert _accumulator_handler_ids() == _accumulator_handler_ids()  # and loguru is left consistent
