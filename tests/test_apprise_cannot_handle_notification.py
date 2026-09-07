@@ -2,6 +2,7 @@ import sys
 import threading
 from threading import ExceptHookArgs
 
+import pytest
 from apprise import Apprise
 from conftest import make_appriser
 
@@ -71,6 +72,9 @@ def test_uncaught_threading_exception_hook_with_non_default_existing_hook(mocker
     assert my_hook_was_called, "Global exception hook was not called."
 
 
+# Under pytest the default hook is pytest's own (a functools.partial); it is chained now that the stdlib check
+# unwraps partials, so pytest sees the simulated crash and would report it.
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_uncaught_threading_exception_hook_with_default_existing_hook(mocker):
     """Test that uncaught exceptions trigger immediate notifications."""
     mock_send = mocker.patch.object(Apprise, "notify", side_effect=Exception)
