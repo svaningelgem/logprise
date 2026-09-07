@@ -129,43 +129,27 @@ def test_periodic_flush_should_stop_on_cleanup(apprise_noop):
     assert len(appriser.buffer) == 0
 
 
-def test_flush_only_if_buffer_has_content(apprise_noop, monkeypatch):
-    """Test that periodic flush only sends notifications if buffer has content."""
-    appriser, _noop = apprise_noop
-
-    # Empty the buffer
+def test_flush_only_if_buffer_has_content(apprise_noop, mocker, monkeypatch):
+    """One periodic tick with an empty buffer never reaches apprise; one with content delivers it once."""
+    appriser, noop = apprise_noop
     appriser.buffer.clear()
+    notify = mocker.spy(Apprise, "notify")
 
-    # Mock the stop_event.wait to return True to avoid infinite loop
-    monkeypatch.setattr(appriser._stop_event, "wait", lambda timeout: True)
+    # wait() answers False once (a tick, so the loop body runs) and then True (stop).
+    answers = [False, True]
+    monkeypatch.setattr(appriser._stop_event, "wait", lambda timeout: answers.pop(0))
 
-    # Create a mock for send_notification to track calls
-    mock_send = MagicMock()
-    monkeypatch.setattr(appriser, "send_notification", mock_send)
-
-    # Simulate a periodic flush without any logs
     appriser._periodic_flush()
+    notify.assert_not_called()
+    assert noop.calls == []
 
-    # Verify send_notification was not called because buffer is empty
-    mock_send.assert_not_called()
-
-    # Reset the mock for the next test
-    mock_send.reset_mock()
-
-    # Add a log message
     logger.error("Test message")
+    answers[:] = [False, True]
 
-    # Mock the stop_event.wait to return True again
-    monkeypatch.setattr(appriser._stop_event, "wait", lambda timeout: True)
-
-    # Now run _periodic_flush manually with content in the buffer
-    # But we'll need to directly call the part that sends the notification
-    # because the full method would exit due to our mock returning True
-    if appriser.buffer:
-        appriser.send_notification()
-
-    # Now send_notification should be called
-    mock_send.assert_called_once()
+    appriser._periodic_flush()
+    notify.assert_called_once()
+    assert len(noop.calls) == 1
+    assert "Test message" in noop.calls[0]["body"]
 
 
 def test_periodic_flush_stops_on_event_set(mocker):
