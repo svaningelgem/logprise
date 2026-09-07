@@ -104,12 +104,33 @@ class InterceptHandler(logging.Handler):
 
 _old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]] = loguru._Logger.remove
 
+# Sinks that must survive logger.remove(): sink -> (current handler id, the level it was added with).
+# The wrapper below re-adds any of them that a remove() took out, so every installed Appriser keeps
+# accumulating (not just the last one) and the pytest plugin keeps capturing.
+_protected_sinks: dict[Callable[[loguru.Message], None], tuple[int, int | str]] = {}
+
+
+def _protect_sink(sink: Callable[[loguru.Message], None], *, level: int | str = "DEBUG") -> None:
+    _protected_sinks[sink] = (logger.add(sink, catch=False, level=level), level)
+
+
+def _unprotect_sink(sink: Callable[[loguru.Message], None]) -> None:
+    handler_id, _ = _protected_sinks.pop(sink)
+    _old_logger_remove(logger, handler_id)
+
+
+@functools.wraps(_old_logger_remove)
+def _remove_keeping_protected_sinks(*args: object, **kwargs: object) -> None:
+    _old_logger_remove(*args, **kwargs)
+    for sink, (handler_id, level) in _protected_sinks.items():
+        if handler_id not in logger._core.handlers:
+            _protected_sinks[sink] = (logger.add(sink, catch=False, level=level), level)
+
 
 # Custom Appriser class to manage notifications
 class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
 
-    _accumulator_id: ClassVar[int | None] = None
     _exit_via_unhandled_exception: ClassVar[bool] = False
     _original_excepthook: Callable[[type[BaseException], BaseException, types.TracebackType | None], None] = None
     _original_threading_excepthook: Callable[[threading.ExceptHookArgs], None] = None
@@ -167,15 +188,8 @@ class Appriser:
         self._setup_removal_prevention()
 
     def _setup_removal_prevention(self) -> None:
-        @functools.wraps(_old_logger_remove)
-        def _new_remove(*args: object, **kwargs: object) -> None:
-            _old_logger_remove(*args, **kwargs)
-
-            if Appriser._accumulator_id not in logger._core.handlers:
-                Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
-
-        loguru._Logger.remove = _new_remove
-        Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
+        loguru._Logger.remove = _remove_keeping_protected_sinks
+        _protect_sink(self.accumulate_log)
 
     def _setup_at_exit_cleanup(self) -> None:
         atexit.register(self.cleanup)
