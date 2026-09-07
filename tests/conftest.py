@@ -8,7 +8,8 @@ import apprise.cli
 import pytest
 from apprise import NotifyBase, NotifyType
 
-from logprise import Appriser, _unprotect_sink, logger
+from logprise import Appriser, logger
+from logprise._sinks import unprotect
 
 
 class NoOpNotifier(NotifyBase):
@@ -69,7 +70,7 @@ def dispose(appriser: Appriser) -> None:
     """
     appriser.stop_periodic_flush()
     atexit.unregister(appriser.cleanup)
-    _unprotect_sink(appriser.accumulate_log)  # its accumulator would otherwise outlive the test
+    unprotect(appriser.accumulate_log)  # its accumulator would otherwise outlive the test
 
 
 @pytest.fixture(scope="session", autouse=True)

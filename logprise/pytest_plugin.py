@@ -20,7 +20,8 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from logprise import _protect_sink, _unprotect_sink, appriser
+from logprise import appriser
+from logprise._sinks import protect, unprotect
 
 
 if TYPE_CHECKING:
@@ -85,11 +86,11 @@ def _hand_to_root_handlers(message: loguru.Message) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    _protect_sink(_hand_to_root_handlers, level=0)
+    protect(_hand_to_root_handlers, level=0)
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:
-    _unprotect_sink(_hand_to_root_handlers)
+    unprotect(_hand_to_root_handlers)
 
 
 @pytest.fixture(autouse=True)
