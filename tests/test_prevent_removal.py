@@ -2,8 +2,10 @@ import sys
 
 import loguru
 import loguru._simple_sinks
+from conftest import make_appriser
 
-from logprise import logger
+from logprise import appriser, logger
+from logprise._sinks import protected, unprotect
 
 
 def _accumulator_handler_ids() -> list[int]:
@@ -48,3 +50,26 @@ def test_prevent_removal_of_accumulator_not_removing_it():
 
     assert len(core.handlers) == before
     assert _accumulator_handler_ids() == accumulator_ids  # Nothing should have changed!
+
+
+def test_every_installed_appriser_survives_logger_remove():
+    """logger.remove() used to re-add only the most recently installed Appriser's sink: the module-global
+    appriser then buffered nothing for the rest of the process."""
+    second = make_appriser()
+
+    logger.remove()
+    logger.error("seen by both")
+
+    assert [m.record["message"] for m in appriser.buffer] == ["seen by both"]
+    assert [m.record["message"] for m in second.buffer] == ["seen by both"]
+
+
+def test_unprotecting_a_sink_twice_is_a_no_op():
+    """The harness may dispose an instance a test already disposed; the second unprotect must not raise."""
+    second = make_appriser()
+
+    unprotect(second.accumulate_log)
+    unprotect(second.accumulate_log)
+
+    assert second.accumulate_log not in protected
+    assert _accumulator_handler_ids() == _accumulator_handler_ids()  # and loguru is left consistent
