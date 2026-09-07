@@ -28,7 +28,7 @@ jobs:
         run: uv run ruff format --check --diff .
 
       - name: Run ruff lint check
-        run: uv run ruff check --diff .
+        run: uv run ruff check --no-fix .
 
       - name: Run consistency checks between stub & module
         env:

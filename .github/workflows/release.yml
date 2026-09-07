@@ -3,9 +3,9 @@ name: Publish to PyPI
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]'
-      - 'v[0-9]+.[0-9]+.[0-9]'
-      - 'V[0-9]+.[0-9]+.[0-9]'
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'V[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
   publish:
@@ -42,7 +42,7 @@ jobs:
 
       - name: Run ruff lint check
         if: always()
-        run: uv run ruff check --diff .
+        run: uv run ruff check --no-fix .
 
       - name: Run consistency checks between stub & module
         if: always()
