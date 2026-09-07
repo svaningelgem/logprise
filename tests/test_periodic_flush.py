@@ -4,6 +4,7 @@ import time
 from threading import ExceptHookArgs
 from unittest.mock import MagicMock
 
+from apprise import Apprise
 from conftest import make_appriser
 
 from logprise import logger
@@ -128,22 +129,25 @@ def test_periodic_flush_should_stop_on_cleanup(apprise_noop):
     assert len(appriser.buffer) == 0
 
 
-def test_flush_only_if_buffer_has_content(apprise_noop, monkeypatch):
-    """One periodic tick with an empty buffer delivers nothing; one with content delivers it once."""
+def test_flush_only_if_buffer_has_content(apprise_noop, mocker, monkeypatch):
+    """One periodic tick with an empty buffer never reaches apprise; one with content delivers it once."""
     appriser, noop = apprise_noop
     appriser.buffer.clear()
+    notify = mocker.spy(Apprise, "notify")
 
     # wait() answers False once (a tick, so the loop body runs) and then True (stop).
     answers = [False, True]
     monkeypatch.setattr(appriser._stop_event, "wait", lambda timeout: answers.pop(0))
 
     appriser._periodic_flush()
+    notify.assert_not_called()
     assert noop.calls == []
 
     logger.error("Test message")
     answers[:] = [False, True]
 
     appriser._periodic_flush()
+    notify.assert_called_once()
     assert len(noop.calls) == 1
     assert "Test message" in noop.calls[0]["body"]
 
