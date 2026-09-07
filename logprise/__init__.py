@@ -41,6 +41,36 @@ class _UnsetType: ...
 _UNSET: Final = _UnsetType()
 
 
+def _is_console_handler(handler: logging.Handler) -> bool:
+    """A StreamHandler writing to the process console: exactly what loguru's own stderr sink replaces.
+
+    File handlers (StreamHandler subclasses over a file) and capture handlers over in-memory streams,
+    such as pytest's, are the host's business and stay.
+    """
+    stream = getattr(handler, "stream", None)
+    return (
+        isinstance(handler, StreamHandler)
+        and stream is not None
+        and stream in (sys.stdout, sys.stderr, sys.__stdout__, sys.__stderr__)
+    )
+
+
+def _strip_console_handlers(start: logging.Logger) -> None:
+    """Remove console handlers from ``start`` and every ancestor up to the root logger."""
+    current: logging.Logger | None = start
+    while current is not None:
+        for handler in current.handlers.copy():
+            if _is_console_handler(handler):
+                current.removeHandler(handler)
+        current = current.parent
+
+
+def _ensure_intercepted(target: logging.Logger) -> None:
+    """Attach an InterceptHandler to ``target`` unless it already has one."""
+    if not any(isinstance(h, InterceptHandler) for h in target.handlers):
+        target.addHandler(InterceptHandler())
+
+
 # Intercept standard logging calls and forward them to loguru
 class InterceptHandler(logging.Handler):
     LOGGING_FILENAMES: ClassVar[set[str]] = {
@@ -69,20 +99,36 @@ class InterceptHandler(logging.Handler):
         # Mark record as handled to prevent duplicate processing
         record._has_been_handled_by_interceptor = True
 
+        # logging promises never to raise out of a logging call: every stdlib handler routes a failure
+        # in its own emit() to handleError(). Keep that promise here too, otherwise a bad %-format in any
+        # library unwinds through the host's logging.error(...) call instead of printing a logging error.
+        try:
+            self._forward(record)
+        except Exception:
+            self.handleError(record)
+
+    def _forward(self, record: logging.LogRecord) -> None:
         # Get corresponding Loguru level if it exists
         try:
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
 
-        # Find caller from where originated the logged message
-        frame, depth = logging.currentframe(), 0
-        while self._should_ignore_this_frame(frame):
+        # Find the frame that made the logging call. Start from this very frame and count every
+        # frame skipped: loguru's depth=N means "N frames above the caller of log()", and that
+        # caller is this method. logging.currentframe() is unsuitable as a start: it returns the
+        # frame 3 levels up on Python <= 3.10 but 1 level up on 3.11+, so a fixed offset is wrong
+        # on one of them and overshoots shallow stacks ("call stack is not deep enough").
+        frame, depth = inspect.currentframe(), 0
+        while frame is not None and self._should_ignore_this_frame(frame):
             frame = frame.f_back
             depth += 1
+        if frame is None:
+            depth = 0  # walked off the top (e.g. python -c): attribute to this handler rather than raise
 
-        # Get the actual logger name instead of 'logging'
-        logger_opt = logger.opt(depth=depth + 2, exception=record.exc_info)
+        # Carry the originating stdlib logger name: sinks (the pytest plugin, user sinks) can then tell a
+        # forwarded record from a native loguru call and keep the name the host's filters key on.
+        logger_opt = logger.bind(_stdlib_logger=record.name).opt(depth=depth, exception=record.exc_info)
         logger_opt.log(level, record.getMessage())
 
 
@@ -172,7 +218,13 @@ class Appriser:
         self.apprise_obj.add(config)
 
     def _setup_interception_handler(self) -> None:
-        logging.basicConfig(handlers=[InterceptHandler()], level=self._notification_level, force=True)
+        # The root logger keeps everything the host gave it: its level (the apprise trigger level is a
+        # notification threshold, not a log level; passing it as basicConfig(level=...) once dropped every
+        # record below ERROR, #170) and its non-console handlers. basicConfig(force=True) would close and
+        # remove a host FileHandler; only console handlers go, since loguru's own stderr sink replaces them.
+        root = logging.getLogger()
+        _strip_console_handlers(root)
+        _ensure_intercepted(root)
 
         original_method = logging.Logger._log
 
@@ -182,14 +234,17 @@ class Appriser:
 
         @functools.wraps(original_method)
         def new_log_method(self: logging.Logger, *args: object, **kwargs: object) -> None:
+            # Every call: logging.config.dictConfig/fileConfig replace a logger's handlers wholesale, so a
+            # handler attached only once would be gone for good. Re-attaching is cheap and keeps the
+            # logger intercepted however often the host reconfigures logging.
+            _ensure_intercepted(self)
+
+            # Once per logger: console handlers on it and its ancestors would print every record a second
+            # time next to loguru's output, so they go. Everything else (file handlers, capture handlers,
+            # propagation) is the host's and stays, and doing this once means later host changes stick.
             if not getattr(self, "_has_been_handled_by_interceptor", False):
-                if not any(isinstance(h, InterceptHandler) for h in self.handlers):
-                    self.addHandler(InterceptHandler())
-                for handler in self.handlers.copy():
-                    if isinstance(handler, StreamHandler):
-                        self.removeHandler(handler)
-                self.propagate = False
-                self._added_intercept_handler = True
+                self._has_been_handled_by_interceptor = True
+                _strip_console_handlers(self)
 
             return original_method(self, *args, **kwargs)
 
