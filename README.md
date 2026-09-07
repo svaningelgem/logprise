@@ -88,10 +88,10 @@ from logprise import appriser
 
 appriser.notification_level = "WARNING"  # Notify on WARNING and above
 appriser.notification_level = "CRITICAL"  # Only critical issues
-appriser.notification_level = 30  # Numeric levels work too
+appriser.notification_level = 50  # Numeric levels work too
 ```
 
-Default is ERROR (30).
+Default is ERROR (40).
 
 ### Timing Control
 
@@ -180,14 +180,6 @@ This means third-party libraries using standard `logging` will also trigger noti
 from logprise import logger
 
 logger.remove()  # Logprise handler persists automatically
-```
-
-**Tagging for routing:**
-```python
-from logprise import appriser
-
-appriser.add("discord://webhook/...", tag=["critical"])
-appriser.add("mailto://...", tag=["all"])
 ```
 
 **Custom notification format:**
