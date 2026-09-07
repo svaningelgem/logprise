@@ -21,6 +21,8 @@ from apprise import NotifyType
 from apprise.common import NotifyFormat
 from loguru import logger
 
+from logprise._sinks import patch_logger_remove, protect
+
 
 if TYPE_CHECKING:
     import types
@@ -132,14 +134,10 @@ class InterceptHandler(logging.Handler):
         logger_opt.log(level, record.getMessage())
 
 
-_old_logger_remove: Final[Callable[[loguru.Logger, int | None], None]] = loguru._Logger.remove
-
-
 # Custom Appriser class to manage notifications
 class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
 
-    _accumulator_id: ClassVar[int | None] = None
     _original_excepthook: Callable[[type[BaseException], BaseException, types.TracebackType | None], None] = None
     _original_threading_excepthook: Callable[[threading.ExceptHookArgs], None] = None
 
@@ -196,15 +194,8 @@ class Appriser:
         self._setup_removal_prevention()
 
     def _setup_removal_prevention(self) -> None:
-        @functools.wraps(_old_logger_remove)
-        def _new_remove(*args: object, **kwargs: object) -> None:
-            _old_logger_remove(*args, **kwargs)
-
-            if Appriser._accumulator_id not in logger._core.handlers:
-                Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
-
-        loguru._Logger.remove = _new_remove
-        Appriser._accumulator_id = logger.add(self.accumulate_log, catch=False)
+        patch_logger_remove()
+        protect(self.accumulate_log)
 
     def _setup_at_exit_cleanup(self) -> None:
         atexit.register(self.cleanup)
