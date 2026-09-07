@@ -205,19 +205,6 @@ def test_clear_discards_buffer_but_keeps_services(apprise_noop):
     assert len(appriser.apprise_obj) == 1  # services are preserved
 
 
-def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, apprise_noop):
-    """When notify() reports failure, the buffer is kept for the next attempt."""
-    appriser, _ = apprise_noop
-
-    logger.error("Boom")
-    assert len(appriser.buffer) == 1
-
-    mocker.patch.object(Apprise, "notify", return_value=False)
-    appriser.send_notification()
-
-    assert len(appriser.buffer) == 1  # not cleared, since the send did not succeed
-
-
 def test_partial_delivery_clears_buffer(mocker, apprise_noop):
     """One unreachable target must not keep the buffer, or the healthy targets get the whole backlog
     re-sent on every flush (#167)."""
@@ -260,6 +247,19 @@ def test_records_logged_during_delivery_survive_the_send(mocker, apprise_noop):
     assert "connection reset" not in healthy.calls[0]["body"]
     assert len(appriser.buffer) == 1
     assert "connection reset during delivery" in appriser.buffer[0]
+
+
+def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, apprise_noop):
+    """When notify() reports failure, the buffer is kept for the next attempt."""
+    appriser, _ = apprise_noop
+
+    logger.error("Boom")
+    assert len(appriser.buffer) == 1
+
+    mocker.patch.object(Apprise, "notify", return_value=False)
+    appriser.send_notification()
+
+    assert len(appriser.buffer) == 1  # not cleared, since the send did not succeed
 
 
 def test_intercept_skips_setup_for_already_handled_logger():
