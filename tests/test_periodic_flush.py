@@ -259,3 +259,34 @@ def test_notify_failure_preserves_buffer(mocker):
     # Verify buffer still contains the message
     assert len(appriser.buffer) == 1
     assert "Test message that should remain in buffer" in appriser.buffer[0].record["message"]
+
+
+def test_changing_flush_interval_mid_send_does_not_revive_the_old_thread(apprise_noop, mocker):
+    """A thread told to stop must not pick up the replacement's stop event and keep flushing beside it."""
+    appriser, noop = apprise_noop
+    in_send, release = threading.Event(), threading.Event()
+
+    def blocking_send(body, title="", **kwargs):
+        in_send.set()
+        release.wait(timeout=5)
+        return True
+
+    mocker.patch.object(noop, "send", side_effect=blocking_send)
+
+    logger.error("something to flush")
+    appriser.flush_interval = 0.05  # restarts the thread with a short interval
+    assert in_send.wait(timeout=5)  # the flush thread is now blocked inside send()
+    old_thread, old_event = appriser._flush_thread, appriser._stop_event
+    join_patch = mocker.patch.object(old_thread, "join")  # the real join would just time out on the blocked thread
+
+    appriser.flush_interval = 60  # stop (times out) and start again while the old thread is mid-send
+    mocker.stop(join_patch)
+
+    assert old_event.is_set()
+    assert appriser._stop_event is not old_event
+    assert appriser._flush_thread is not old_thread
+
+    release.set()
+    old_thread.join(timeout=5)
+    assert not old_thread.is_alive()
+    assert appriser._flush_thread.is_alive()

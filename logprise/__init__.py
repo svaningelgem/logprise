@@ -318,19 +318,25 @@ class Appriser:
                 self.stop_periodic_flush()
                 self._start_periodic_flush()
 
-    def _periodic_flush(self) -> None:
-        """Periodically flush log buffer."""
-        while not self._stop_event.is_set():
+    def _periodic_flush(self, stop_event: threading.Event | None = None) -> None:
+        """Periodically flush the log buffer until ``stop_event`` (this thread's own) is set."""
+        stop_event = stop_event or self._stop_event
+        while not stop_event.is_set():
             # Wait for the specified interval but allow early termination
-            if self._stop_event.wait(self._flush_interval):
+            if stop_event.wait(self._flush_interval):
                 break
 
             self.send_notification()
 
     def _start_periodic_flush(self) -> None:
         """Start the periodic flush thread."""
-        self._stop_event.clear()
-        self._flush_thread = threading.Thread(target=self._periodic_flush, daemon=True, name="logprise-flush")
+        # Every thread gets its own stop event. Reusing one and clearing it here revived a previous
+        # thread that had been told to stop but was still inside a slow send when the join timed out,
+        # leaving two threads flushing the same buffer.
+        self._stop_event = threading.Event()
+        self._flush_thread = threading.Thread(
+            target=self._periodic_flush, args=(self._stop_event,), daemon=True, name="logprise-flush"
+        )
         self._flush_thread.start()
 
     def add(
@@ -421,17 +427,21 @@ class Appriser:
             logger.trace("No logs to send")
             return
 
+        # Detach the batch before delivering. Records that arrive while a send is in flight (the flush
+        # thread runs concurrently with the host, and a target's own error logging is intercepted
+        # straight back here) then land in the fresh buffer instead of being wiped after the send.
+        batch, self.buffer = self.buffer, []
+
         if not len(self.apprise_obj):
             # No services configured: skip notifying so apprise doesn't log
             # "There are no service(s) to notify" for every flush. Drop the
-            # buffered logs too -- services should have been configured by now,
+            # detached batch too -- services should have been configured by now,
             # and there is nowhere to deliver them, so keeping them only leaks memory.
             logger.trace("No notification services configured; discarding buffered logs")
-            self.clear()
             return
 
         # Format the buffered logs into a single message
-        message = "".join(self.buffer).replace("\r", "")
+        message = "".join(batch).replace("\r", "")
 
         # Default path: deliver the logs as a preformatted HTML block. apprise's TEXT->HTML
         # conversion escapes every space to &nbsp; (apprise.URLBase.escape_html), which mangles
@@ -444,8 +454,8 @@ class Appriser:
 
         # Deliver to each target separately. Apprise.notify() collapses every target into a single
         # bool, so one unreachable target would keep the buffer forever and re-send the whole backlog
-        # to the healthy targets on every flush (#167). Clear as soon as any target took the batch;
-        # a batch nobody could deliver is kept for the next attempt.
+        # to the healthy targets on every flush (#167). The batch is done as soon as any target took
+        # it; a batch nobody could deliver goes back for the next attempt.
         delivered = False
         for server in self.apprise_obj:
             try:
@@ -457,8 +467,8 @@ class Appriser:
                 )
             except BaseException as e:
                 logger.warning(f"Failed to send notification: {e}")
-        if delivered:
-            self.clear()
+        if not delivered:
+            self.buffer[:0] = batch  # ahead of whatever accumulated meanwhile
 
 
 appriser = Appriser()

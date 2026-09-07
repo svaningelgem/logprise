@@ -237,6 +237,31 @@ def test_partial_delivery_clears_buffer(mocker, apprise_noop):
     assert "first error" not in healthy.calls[-1]["body"]
 
 
+def test_records_logged_during_delivery_survive_the_send(mocker, apprise_noop):
+    """A record that arrives while a batch is in flight belongs to the next batch, not the bin.
+
+    A target's own error logging is intercepted straight back into the buffer during notify(),
+    and the flush thread runs concurrently with the host: neither may be wiped by the send.
+    """
+    appriser, healthy = apprise_noop
+
+    def send_and_log_a_new_error(body, title="", **kwargs):
+        healthy.calls.append({"title": title, "body": body})
+        logging.getLogger("net").error("connection reset during delivery")
+        return True
+
+    mocker.patch.object(healthy, "send", side_effect=send_and_log_a_new_error)
+
+    logger.error("first real error")
+    appriser.send_notification()
+
+    assert len(healthy.calls) == 1
+    assert "first real error" in healthy.calls[0]["body"]
+    assert "connection reset" not in healthy.calls[0]["body"]
+    assert len(appriser.buffer) == 1
+    assert "connection reset during delivery" in appriser.buffer[0]
+
+
 def test_intercept_skips_setup_for_already_handled_logger():
     """A logger already flagged as handled does not get the interceptor re-attached."""
     make_appriser()  # patches logging.Logger._log
