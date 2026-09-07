@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import ClassVar
 
 import apprise
@@ -14,6 +14,9 @@ __all__: list[str] = ["appriser", "logger"]
 class _UnsetType: ...
 
 _UNSET: _UnsetType
+
+def _protect_sink(sink: Callable[[loguru.Message], None], *, level: int | str = "DEBUG") -> None: ...
+def _unprotect_sink(sink: Callable[[loguru.Message], None]) -> None: ...
 
 class InterceptHandler(logging.Handler):
     LOGGING_FILENAMES: ClassVar[set[str]]

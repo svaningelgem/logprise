@@ -1,9 +1,15 @@
-"""Pytest plugin for logprise/caplog integration.
+"""Pytest plugin: make loguru output visible to pytest's log capture.
 
-This plugin ensures that logs emitted via logprise (which uses loguru internally)
-are captured by pytest's caplog fixture.
+logprise routes every record through loguru, and loguru bypasses ``logging``
+entirely, so neither pytest's ``caplog`` fixture nor the "Captured log call"
+section of a failure report would see anything on their own. This plugin adds
+one session-wide loguru sink that hands each message to the root logger's
+handlers, which is exactly where pytest installs its capture handlers for
+every test phase. Standard-library records that logprise intercepted are
+skipped when they still propagate to the root logger, because pytest already
+captured the original there with the right name, path and filters applied.
 
-The plugin is automatically loaded by pytest when logprise is installed,
+The plugin is loaded automatically by pytest when logprise is installed,
 thanks to the pytest11 entry point defined in pyproject.toml.
 """
 
@@ -13,9 +19,8 @@ import logging
 from typing import TYPE_CHECKING, cast
 
 import pytest
-from loguru import logger
 
-from logprise import appriser
+from logprise import _protect_sink, _unprotect_sink, appriser
 
 
 if TYPE_CHECKING:
@@ -23,68 +28,68 @@ if TYPE_CHECKING:
     from logging import _SysExcInfoType
 
     import loguru
-    from pytest import LogCaptureFixture
 
 
-class _CaplogState:
-    """Container for caplog fixture state to avoid module-level globals."""
+class _ForwardedRecord(logging.LogRecord):
+    """A LogRecord built from a loguru message.
 
-    fixture: LogCaptureFixture | None = None
+    The class attribute is the marker InterceptHandler checks, so handing the
+    record to the root logger never forwards it back into loguru.
+    """
+
+    _has_been_handled_by_interceptor = True
 
 
-_state = _CaplogState()
+def _to_log_record(record: loguru.Record) -> logging.LogRecord:
+    """Build a standard LogRecord from a loguru record dict.
 
-
-def _create_log_record(record: loguru.Record) -> logging.LogRecord:
-    """Create a standard logging.LogRecord from a loguru record dict."""
-    # Get the level info
-    level_no = record["level"].no
-    level_name = record["level"].name
-
-    # Get module/function info
-    module = record.get("module", "")
-    func_name = record.get("function", "")
-    line_no = record.get("line", 0)
-    file_path = record.get("file", None)
-    pathname = str(file_path) if file_path else ""
-
-    # Create a LogRecord directly
-    log_record = logging.LogRecord(
-        name=record.get("name") or module or "logprise",
-        level=level_no,
-        pathname=pathname,
-        lineno=line_no,
+    A record that came in through logprise's interception keeps the name of the
+    ``logging`` logger it was logged on; a native loguru call gets the module
+    name loguru recorded.
+    """
+    log_record = _ForwardedRecord(
+        name=record["extra"].get("_stdlib_logger") or record["name"] or "logprise",
+        level=record["level"].no,
+        pathname=record["file"].path,
+        lineno=record["line"],
         msg=record["message"],
         args=(),
         exc_info=cast("_SysExcInfoType | None", record["exception"]),
-        func=func_name,
+        func=record["function"],
     )
-
-    # Set the level name explicitly
-    log_record.levelname = level_name
-
+    log_record.levelname = record["level"].name
     return log_record
 
 
-def _loguru_to_caplog(message: loguru.Message) -> None:
-    """Sink function that forwards loguru messages directly to caplog's handler.
+def _reaches_root(logger_name: str) -> bool:
+    """Whether a ``logging`` record from this logger propagates up to the root logger's handlers."""
+    root = logging.getLogger()
+    current = root if logger_name == "root" else logging.getLogger(logger_name)
+    chain: list[logging.Logger] = []
+    while current is not root:
+        chain.append(current)
+        current = current.parent or root
+    return all(ancestor.propagate for ancestor in chain)
 
-    This function bypasses the standard logging system entirely to avoid
-    the recursion caused by logprise's InterceptHandler.
-    """
-    if _state.fixture is None:
-        return
 
-    # Get the record dict from the message
+def _hand_to_root_handlers(message: loguru.Message) -> None:
+    """Session-wide loguru sink feeding pytest's capture handlers on the root logger."""
     record = message.record
+    stdlib_logger = record["extra"].get("_stdlib_logger")
+    if stdlib_logger is not None and _reaches_root(stdlib_logger):
+        return  # pytest's handlers on the root logger already captured the original record
 
-    # Create a standard LogRecord
-    log_record = _create_log_record(record)
+    root = logging.getLogger()
+    if root.isEnabledFor(record["level"].no):
+        root.handle(_to_log_record(record))
 
-    # Check if the record's level meets the caplog's handler level threshold
-    # This respects caplog.at_level() context manager
-    if log_record.levelno >= _state.fixture.handler.level:
-        _state.fixture.handler.emit(log_record)
+
+def pytest_configure(config: pytest.Config) -> None:
+    _protect_sink(_hand_to_root_handlers, level=0)
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    _unprotect_sink(_hand_to_root_handlers)
 
 
 @pytest.fixture(autouse=True)
@@ -110,31 +115,3 @@ def _clear_appriser_buffer() -> Generator[None, None, None]:
         yield
     finally:
         appriser.buffer.clear()
-
-
-@pytest.fixture
-def caplog(caplog: LogCaptureFixture) -> Generator[LogCaptureFixture, None, None]:
-    """Enhanced caplog fixture that captures logprise/loguru logs.
-
-    This fixture wraps pytest's built-in caplog fixture and adds a loguru
-    sink that forwards logs directly to caplog's handler, bypassing
-    the standard logging system to avoid recursion with logprise's
-    InterceptHandler.
-    """
-    # Store reference to caplog fixture
-    _state.fixture = caplog
-
-    # Add a loguru sink that writes directly to caplog
-    handler_id = logger.add(
-        _loguru_to_caplog,
-        format="{message}",
-        level=0,  # Capture all levels, let caplog filter
-        catch=False,
-    )
-
-    try:
-        yield caplog
-    finally:
-        # Remove the sink and clear the fixture reference
-        logger.remove(handler_id)
-        _state.fixture = None
