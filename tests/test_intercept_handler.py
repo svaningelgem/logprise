@@ -54,9 +54,9 @@ def test_intercepted_record_points_at_the_stdlib_call_site():
     assert records[-1]["extra"]["_stdlib_logger"] == "test.depth"
 
 
-def test_intercept_falls_back_to_emit_when_every_frame_is_ignored(mocker: pytest_mock.MockerFixture):
+def test_intercept_falls_back_to_the_handler_when_every_frame_is_ignored(mocker: pytest_mock.MockerFixture):
     """If the walk runs off the top of the stack (python -c skips its <string> module frame), the record is
-    attributed to emit() instead of making loguru raise "call stack is not deep enough" into the host."""
+    attributed to the handler instead of making loguru raise "call stack is not deep enough" into the host."""
     make_appriser()
     records: list[dict] = []
     logger.add(lambda message: records.append(message.record), level=0)
@@ -64,7 +64,7 @@ def test_intercept_falls_back_to_emit_when_every_frame_is_ignored(mocker: pytest
 
     logging.getLogger("test.depth").error("no attributable frame")
 
-    assert records[-1]["function"] == "emit"
+    assert records[-1]["function"] == "_forward"
 
 
 def test_bad_format_args_do_not_raise_out_of_the_logging_call(mocker: pytest_mock.MockerFixture):
