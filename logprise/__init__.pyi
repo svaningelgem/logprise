@@ -27,7 +27,6 @@ class Appriser:
     buffer: list[loguru.Message]
     recursion_depth: int = ...
     flush_interval: int | float = 3600
-    apprise_trigger_level: ClassVar[str] = "ERROR"
     notify_type: str | apprise.NotifyType
     body_format: str | NotifyFormat | None
 

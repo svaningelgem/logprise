@@ -8,7 +8,7 @@ from apprise import Apprise, NotifyFormat, NotifyType
 from conftest import NoOpNotifier, make_appriser
 from loguru import logger
 
-from logprise import InterceptHandler
+from logprise import Appriser, InterceptHandler
 
 
 def test_intercept_handler_forwards_to_loguru():
@@ -393,6 +393,17 @@ def test_console_handler_strip_runs_once_per_logger():
         assert console in log.handlers
     finally:
         log.removeHandler(console)
+
+
+def test_trigger_level_zero_is_honoured():
+    """apprise_trigger_level=0 means notify on everything; it used to be silently replaced by ERROR."""
+    assert Appriser(apprise_trigger_level=0).notification_level == 0
+
+
+def test_trigger_level_empty_string_is_rejected():
+    """An empty level name is a mistake and must not quietly become ERROR."""
+    with pytest.raises(ValueError, match="does not exist"):
+        Appriser(apprise_trigger_level="")
 
 
 def test_install_is_idempotent(mocker):

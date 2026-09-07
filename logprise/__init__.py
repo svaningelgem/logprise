@@ -158,7 +158,7 @@ class Appriser:
 
         # Internal variables
         self._notification_level: int = loguru.logger.level("ERROR").no  # The default
-        self.notification_level = apprise_trigger_level or "ERROR"  # Let the property handle the conversion
+        self.notification_level = apprise_trigger_level  # Let the property handle the conversion
 
         self._flush_interval: int | float = 3600  # The default
         self.flush_interval = flush_interval  # Let the property handle the conversion
