@@ -4,6 +4,7 @@ import time
 from threading import ExceptHookArgs
 from unittest.mock import MagicMock
 
+import pytest
 from conftest import make_appriser
 
 from logprise import logger
@@ -24,6 +25,9 @@ def test_uncaught_exception_hook(apprise_noop, monkeypatch):
     mock_send.assert_called_once()
 
 
+# The original hook under pytest is pytest's own (a functools.partial); it is chained since the stdlib check
+# unwraps partials, so pytest sees the simulated crash and would report it.
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
 def test_uncaught_threading_exception_hook(apprise_noop, monkeypatch):
     """Test that uncaught exceptions trigger immediate notifications."""
     # Save original excepthook
