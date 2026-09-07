@@ -25,7 +25,9 @@ def test_uncaught_exception_hook(apprise_noop, monkeypatch):
     mock_send.assert_called_once()
 
 
-def test_uncaught_threading_exception_hook(apprise_noop, monkeypatch):
+# The original hook under pytest is pytest's own (a functools.partial); it is chained since the stdlib check
+# unwraps partials, so pytest sees the simulated crash and would report it; recwarn absorbs that report.
+def test_uncaught_threading_exception_hook(apprise_noop, monkeypatch, recwarn):
     """Test that uncaught exceptions trigger immediate notifications."""
     # Save original excepthook
     appriser, _noop = apprise_noop

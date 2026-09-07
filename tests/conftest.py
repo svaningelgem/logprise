@@ -106,14 +106,6 @@ def apprise_noop() -> Generator[tuple[Appriser, NoOpNotifier], Any, None]:
 
 
 @pytest.fixture(autouse=True)
-def reset_appriser_object() -> Generator[None, None, None]:
-    try:
-        yield
-    finally:
-        Appriser._exit_via_unhandled_exception = False
-
-
-@pytest.fixture(autouse=True)
 def save_restore_excepthooks() -> Generator[None, None, None]:
     original_excepthook = sys.excepthook
     original_threading_excepthook = threading.excepthook
