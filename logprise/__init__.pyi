@@ -1,6 +1,6 @@
 import logging
-from collections.abc import Callable, Iterable
-from typing import ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar, TypeAlias
 
 import apprise
 import loguru
@@ -10,6 +10,8 @@ from loguru import logger
 __all__: list[str] = ["appriser", "logger"]
 
 # Type definitions
+
+_ServerSpec: TypeAlias = str | dict[str, Any] | apprise.NotifyBase | apprise.AppriseConfig | apprise.ConfigBase
 
 class _UnsetType: ...
 
@@ -45,12 +47,7 @@ class Appriser:
     def install(self) -> None: ...
     def add(
         self,
-        servers: str
-        | dict[str, object]
-        | Iterable[str]
-        | apprise.ConfigBase
-        | apprise.NotifyBase
-        | apprise.AppriseConfig,
+        servers: _ServerSpec | list[_ServerSpec],
         asset: apprise.AppriseAsset | None = None,
         tag: list[str] | None = None,
     ) -> bool: ...

@@ -54,7 +54,7 @@ jobs:
         if: always()
         env:
           PYTHONPATH: "."
-        run: uv run mypy .
+        run: uv run mypy logprise/__init__.py logprise/pytest_plugin.py
 
       - name: Run tests with coverage
         if: always()

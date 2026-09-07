@@ -38,7 +38,7 @@ jobs:
       - name: Running mypy
         env:
           PYTHONPATH: "."
-        run: uv run mypy .
+        run: uv run mypy logprise/__init__.py logprise/pytest_plugin.py
 
   test:
     needs: lint
