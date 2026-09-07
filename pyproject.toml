@@ -176,4 +176,7 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 strict = true
-exclude = "tests/"
+# The stub next to the implementation would otherwise shadow it: mypy resolves the logprise
+# package to logprise/__init__.pyi and never loads logprise/__init__.py. Skipping .pyi files
+# during discovery makes the implementation the source; the stub itself is checked by stubtest.
+exclude = ["tests/", '\.pyi$']

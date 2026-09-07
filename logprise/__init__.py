@@ -26,9 +26,13 @@ from logprise._sinks import patch_logger_remove, protect
 
 if TYPE_CHECKING:
     import types
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable
+    from typing import Any
 
     from apprise import AppriseAsset, AppriseConfig, ConfigBase, NotifyBase
+
+    # What apprise.Apprise.add accepts, one at a time or as a list. dict values are apprise's own Any.
+    _ServerSpec = str | dict[str, Any] | NotifyBase | AppriseConfig | ConfigBase
 
 __all__ = ["appriser", "logger"]
 
@@ -41,6 +45,10 @@ class _UnsetType: ...
 
 
 _UNSET: Final = _UnsetType()
+
+# Attribute names used as markers on objects we do not own (loggers, the patched _log).
+_INTERCEPTED_FLAG: Final = "_has_been_handled_by_interceptor"
+_INTERCEPT_MARK: Final = "_intercepted_by_logprise"
 
 
 def _is_console_handler(handler: logging.Handler) -> bool:
@@ -82,7 +90,7 @@ class InterceptHandler(logging.Handler):
     }
     CURRENT_FILENAME: ClassVar[str] = Path(__file__).resolve().absolute().as_posix().lower()
 
-    def _should_ignore_this_frame(self, frame: object) -> bool:
+    def _should_ignore_this_frame(self, frame: types.FrameType) -> bool:
         filename = Path(frame.f_code.co_filename).resolve().absolute().as_posix().lower()
         if filename == self.CURRENT_FILENAME:
             return True
@@ -111,6 +119,7 @@ class InterceptHandler(logging.Handler):
 
     def _forward(self, record: logging.LogRecord) -> None:
         # Get corresponding Loguru level if it exists
+        level: int | str
         try:
             level = logger.level(record.levelname).name
         except ValueError:
@@ -138,8 +147,8 @@ class InterceptHandler(logging.Handler):
 class Appriser:
     """A wrapper around Apprise to accumulate logs and send notifications."""
 
-    _original_excepthook: Callable[[type[BaseException], BaseException, types.TracebackType | None], None] = None
-    _original_threading_excepthook: Callable[[threading.ExceptHookArgs], None] = None
+    _original_excepthook: Callable[[type[BaseException], BaseException, types.TracebackType | None], None] | None = None
+    _original_threading_excepthook: Callable[[threading.ExceptHookArgs], object] | None = None
 
     def __init__(
         self,
@@ -216,10 +225,11 @@ class Appriser:
         _strip_console_handlers(root)
         _ensure_intercepted(root)
 
-        original_method = logging.Logger._log
+        # Typed loosely on purpose: the wrapper forwards whatever signature this Python's _log has.
+        original_method: Callable[..., None] = logging.Logger._log
 
         # Check if already intercepted by our method
-        if hasattr(original_method, "_intercepted_by_logprise"):
+        if hasattr(original_method, _INTERCEPT_MARK):
             return
 
         @functools.wraps(original_method)
@@ -232,15 +242,15 @@ class Appriser:
             # Once per logger: console handlers on it and its ancestors would print every record a second
             # time next to loguru's output, so they go. Everything else (file handlers, capture handlers,
             # propagation) is the host's and stays, and doing this once means later host changes stick.
-            if not getattr(self, "_has_been_handled_by_interceptor", False):
-                self._has_been_handled_by_interceptor = True
+            if not getattr(self, _INTERCEPTED_FLAG, False):
+                setattr(self, _INTERCEPTED_FLAG, True)
                 _strip_console_handlers(self)
 
             return original_method(self, *args, **kwargs)
 
         # Mark our wrapper with a custom attribute
-        new_log_method._intercepted_by_logprise = True
-        logging.Logger._log = new_log_method
+        setattr(new_log_method, _INTERCEPT_MARK, True)
+        logging.Logger._log = new_log_method  # type: ignore[method-assign]
 
     def _setup_sys_exception_hook(self) -> None:
         """Set up a hook to capture uncaught exceptions."""
@@ -283,7 +293,7 @@ class Appriser:
     )
 
     @staticmethod
-    def _is_method_in_stdlib(method: Callable) -> bool:
+    def _is_method_in_stdlib(method: Callable[..., object]) -> bool:
         # A functools.partial has no module of its own: attribute lookup falls through to its type and
         # answers "functools", which would make any host hook bound with partial look like the stdlib one.
         while isinstance(method, partial):
@@ -334,7 +344,7 @@ class Appriser:
         self,
         args: threading.ExceptHookArgs,
         /,
-        original_excepthook: Callable[[threading.ExceptHookArgs], None],
+        original_excepthook: Callable[[threading.ExceptHookArgs], object],
     ) -> None:
         """Handle uncaught exceptions by logging and sending notifications."""
         # threading.excepthook silently ignores SystemExit: ending a thread with sys.exit() is not an error.
@@ -388,8 +398,8 @@ class Appriser:
 
     def add(
         self,
-        servers: str | dict[str, object] | Iterable[str] | ConfigBase | NotifyBase | AppriseConfig,
-        asset: AppriseAsset = None,
+        servers: _ServerSpec | list[_ServerSpec],
+        asset: AppriseAsset | None = None,
         tag: list[str] | None = None,
     ) -> bool:
         """
@@ -426,8 +436,8 @@ class Appriser:
         # here), and one they could not deliver gets its retry.
         self.send_notification()
 
-        sys.excepthook = self._original_excepthook
-        threading.excepthook = self._original_threading_excepthook
+        sys.excepthook = self._original_excepthook or sys.__excepthook__
+        threading.excepthook = self._original_threading_excepthook or threading.__excepthook__
 
     @property
     def notification_level(self) -> int:
