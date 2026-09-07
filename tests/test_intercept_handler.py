@@ -51,6 +51,7 @@ def test_intercepted_record_points_at_the_stdlib_call_site():
 
     assert records[-1]["function"] == "call_site"
     assert records[-1]["name"] == __name__
+    assert records[-1]["extra"]["_stdlib_logger"] == "test.depth"
 
 
 def test_intercept_falls_back_to_emit_when_every_frame_is_ignored(mocker: pytest_mock.MockerFixture):
@@ -64,3 +65,14 @@ def test_intercept_falls_back_to_emit_when_every_frame_is_ignored(mocker: pytest
     logging.getLogger("test.depth").error("no attributable frame")
 
     assert records[-1]["function"] == "emit"
+
+
+def test_bad_format_args_do_not_raise_out_of_the_logging_call(mocker: pytest_mock.MockerFixture):
+    """logging never raises from a logging call: a bad %-format goes to handleError, as with every stdlib
+    handler, instead of unwinding through the host's logging.error(...)."""
+    make_appriser()
+    handle_error = mocker.patch.object(InterceptHandler, "handleError")
+
+    logging.getLogger("test.badformat").error("value: %s %s", 1)  # noqa: PLE1206  (must not raise)
+
+    handle_error.assert_called_once()

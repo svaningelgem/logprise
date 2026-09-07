@@ -69,6 +69,15 @@ class InterceptHandler(logging.Handler):
         # Mark record as handled to prevent duplicate processing
         record._has_been_handled_by_interceptor = True
 
+        # logging promises never to raise out of a logging call: every stdlib handler routes a failure
+        # in its own emit() to handleError(). Keep that promise here too, otherwise a bad %-format in any
+        # library unwinds through the host's logging.error(...) call instead of printing a logging error.
+        try:
+            self._forward(record)
+        except Exception:
+            self.handleError(record)
+
+    def _forward(self, record: logging.LogRecord) -> None:
         # Get corresponding Loguru level if it exists
         try:
             level = logger.level(record.levelname).name
@@ -77,7 +86,7 @@ class InterceptHandler(logging.Handler):
 
         # Find the frame that made the logging call. Start from this very frame and count every
         # frame skipped: loguru's depth=N means "N frames above the caller of log()", and that
-        # caller is emit() itself. logging.currentframe() is unsuitable as a start: it returns the
+        # caller is this method. logging.currentframe() is unsuitable as a start: it returns the
         # frame 3 levels up on Python <= 3.10 but 1 level up on 3.11+, so a fixed offset is wrong
         # on one of them and overshoots shallow stacks ("call stack is not deep enough").
         frame, depth = inspect.currentframe(), 0
@@ -85,9 +94,11 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
         if frame is None:
-            depth = 0  # walked off the top (e.g. python -c): attribute to emit() rather than raise
+            depth = 0  # walked off the top (e.g. python -c): attribute to this handler rather than raise
 
-        logger_opt = logger.opt(depth=depth, exception=record.exc_info)
+        # Carry the originating stdlib logger name: sinks (the pytest plugin, user sinks) can then tell a
+        # forwarded record from a native loguru call and keep the name the host's filters key on.
+        logger_opt = logger.bind(_stdlib_logger=record.name).opt(depth=depth, exception=record.exc_info)
         logger_opt.log(level, record.getMessage())
 
 
