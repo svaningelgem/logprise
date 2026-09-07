@@ -145,8 +145,10 @@ def _protect_sink(sink: Callable[[loguru.Message], None], *, level: int | str = 
 
 
 def _unprotect_sink(sink: Callable[[loguru.Message], None]) -> None:
-    handler_id, _ = _protected_sinks.pop(sink)
-    _old_logger_remove(logger, handler_id)
+    """Remove a protected sink for good; a no-op for a sink that is not (or no longer) protected."""
+    entry = _protected_sinks.pop(sink, None)
+    if entry is not None:
+        _old_logger_remove(logger, entry[0])
 
 
 @functools.wraps(_old_logger_remove)
