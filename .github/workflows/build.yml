@@ -16,70 +16,56 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v7
+      - name: Install uv and Python 3.10
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: "3.10"
-          cache: 'poetry'
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: uv sync --locked
 
       - name: Run ruff format check
-        run: poetry run ruff format --check --diff .
+        run: uv run ruff format --check --diff .
 
       - name: Run ruff lint check
-        run: poetry run ruff check --diff .
+        run: uv run ruff check --no-fix .
 
       - name: Run consistency checks between stub & module
         env:
           PYTHONPATH: "."
-        run: poetry run stubtest logprise
+        run: uv run stubtest logprise
 
       - name: Running mypy
         env:
           PYTHONPATH: "."
-        run: poetry run mypy .
+        run: uv run mypy .
 
   test:
     needs: lint
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
       fail-fast: false
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
+      - name: Install uv and Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'poetry'
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: uv sync --locked
 
       - name: Run tests with coverage
         # Use `coverage run` (not pytest-cov) so measurement starts before pytest
         # imports the logprise package and its pytest plugin, capturing their
         # module-level definitions too.
         run: |
-          poetry run coverage run -m pytest
-          poetry run coverage xml
+          uv run coverage run -m pytest
+          uv run coverage xml
 
       - name: Upload coverage report
         if: github.actor != 'dependabot[bot]'

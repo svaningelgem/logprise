@@ -4,6 +4,7 @@ import time
 from threading import ExceptHookArgs
 from unittest.mock import MagicMock
 
+from apprise import Apprise
 from conftest import make_appriser
 
 from logprise import logger
@@ -130,43 +131,27 @@ def test_periodic_flush_should_stop_on_cleanup(apprise_noop):
     assert len(appriser.buffer) == 0
 
 
-def test_flush_only_if_buffer_has_content(apprise_noop, monkeypatch):
-    """Test that periodic flush only sends notifications if buffer has content."""
-    appriser, _noop = apprise_noop
-
-    # Empty the buffer
+def test_flush_only_if_buffer_has_content(apprise_noop, mocker, monkeypatch):
+    """One periodic tick with an empty buffer never reaches apprise; one with content delivers it once."""
+    appriser, noop = apprise_noop
     appriser.buffer.clear()
+    notify = mocker.spy(Apprise, "notify")
 
-    # Mock the stop_event.wait to return True to avoid infinite loop
-    monkeypatch.setattr(appriser._stop_event, "wait", lambda timeout: True)
+    # wait() answers False once (a tick, so the loop body runs) and then True (stop).
+    answers = [False, True]
+    monkeypatch.setattr(appriser._stop_event, "wait", lambda timeout: answers.pop(0))
 
-    # Create a mock for send_notification to track calls
-    mock_send = MagicMock()
-    monkeypatch.setattr(appriser, "send_notification", mock_send)
-
-    # Simulate a periodic flush without any logs
     appriser._periodic_flush()
+    notify.assert_not_called()
+    assert noop.calls == []
 
-    # Verify send_notification was not called because buffer is empty
-    mock_send.assert_not_called()
-
-    # Reset the mock for the next test
-    mock_send.reset_mock()
-
-    # Add a log message
     logger.error("Test message")
+    answers[:] = [False, True]
 
-    # Mock the stop_event.wait to return True again
-    monkeypatch.setattr(appriser._stop_event, "wait", lambda timeout: True)
-
-    # Now run _periodic_flush manually with content in the buffer
-    # But we'll need to directly call the part that sends the notification
-    # because the full method would exit due to our mock returning True
-    if appriser.buffer:
-        appriser.send_notification()
-
-    # Now send_notification should be called
-    mock_send.assert_called_once()
+    appriser._periodic_flush()
+    notify.assert_called_once()
+    assert len(noop.calls) == 1
+    assert "Test message" in noop.calls[0]["body"]
 
 
 def test_periodic_flush_stops_on_event_set(mocker):
@@ -249,7 +234,7 @@ def test_notify_failure_preserves_buffer(mocker):
     appriser = make_appriser(add_noop=True)
 
     # Mock apprise_obj.notify to return False (failure)
-    mocker.patch.object(appriser.apprise_obj, "notify", return_value=False)
+    mocker.patch.object(Apprise, "notify", return_value=False)
 
     # Add test message to buffer
     logger.error("Test message that should remain in buffer")
@@ -260,3 +245,34 @@ def test_notify_failure_preserves_buffer(mocker):
     # Verify buffer still contains the message
     assert len(appriser.buffer) == 1
     assert "Test message that should remain in buffer" in appriser.buffer[0].record["message"]
+
+
+def test_changing_flush_interval_mid_send_does_not_revive_the_old_thread(apprise_noop, mocker):
+    """A thread told to stop must not pick up the replacement's stop event and keep flushing beside it."""
+    appriser, noop = apprise_noop
+    in_send, release = threading.Event(), threading.Event()
+
+    def blocking_send(body, title="", **kwargs):
+        in_send.set()
+        release.wait(timeout=5)
+        return True
+
+    mocker.patch.object(noop, "send", side_effect=blocking_send)
+
+    logger.error("something to flush")
+    appriser.flush_interval = 0.05  # restarts the thread with a short interval
+    assert in_send.wait(timeout=5)  # the flush thread is now blocked inside send()
+    old_thread, old_event = appriser._flush_thread, appriser._stop_event
+    join_patch = mocker.patch.object(old_thread, "join")  # the real join would just time out on the blocked thread
+
+    appriser.flush_interval = 60  # stop (times out) and start again while the old thread is mid-send
+    mocker.stop(join_patch)
+
+    assert old_event.is_set()
+    assert appriser._stop_event is not old_event
+    assert appriser._flush_thread is not old_thread
+
+    release.set()
+    old_thread.join(timeout=5)
+    assert not old_thread.is_alive()
+    assert appriser._flush_thread.is_alive()

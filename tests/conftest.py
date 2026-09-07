@@ -1,8 +1,10 @@
+import atexit
 import sys
 import threading
 from collections.abc import Generator
 from typing import Any
 
+import apprise.cli
 import pytest
 from apprise import NotifyBase, NotifyType
 
@@ -48,9 +50,48 @@ def make_appriser(*, add_noop: bool = False, **kwargs: Any) -> Appriser:
     """
     appriser = Appriser(**kwargs)
     appriser.install()
+    _armed.append(appriser)
     if add_noop:
         appriser.add(NoOpNotifier())
     return appriser
+
+
+# Every instance make_appriser() armed during the current test; disposed of on teardown.
+_armed: list[Appriser] = []
+
+
+def dispose(appriser: Appriser) -> None:
+    """Disarm an instance ``make_appriser()`` built: stop its flush thread and drop its atexit hook.
+
+    ``install()`` starts a daemon flush thread and registers ``cleanup`` with ``atexit``.
+    Left alone, every instance a test built keeps flushing for the rest of the session and
+    fires its own delivery attempt at interpreter exit.
+    """
+    appriser.stop_periodic_flush()
+    atexit.unregister(appriser.cleanup)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def no_host_apprise_config() -> Generator[None, None, None]:
+    """Never load the developer's real apprise config (``~/.apprise`` etc.) into test instances.
+
+    ``install()`` calls ``_load_default_config_paths``; with a real config present every
+    ``make_appriser()`` instance gains real targets, which breaks the tests that count
+    services or notify() calls and makes the leaked instances page the developer at exit.
+    """
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(apprise.cli, "DEFAULT_CONFIG_PATHS", [])
+        yield
+
+
+@pytest.fixture(autouse=True)
+def dispose_armed_apprisers() -> Generator[None, None, None]:
+    try:
+        yield
+    finally:
+        for instance in _armed:
+            dispose(instance)
+        _armed.clear()
 
 
 @pytest.fixture
