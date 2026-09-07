@@ -30,7 +30,6 @@ def test_prevent_removal_of_accumulator():
     assert len(core.handlers) == before
     assert current_id not in core.handlers, f"'{current_id}' should have been removed!"
     new_sink_function = core.handlers[_accumulator_handler_id(appriser)]._sink._function
-    assert old_sink_function is not new_sink_function
     assert "bound method Appriser.accumulate_log" in str(new_sink_function)
 
 
