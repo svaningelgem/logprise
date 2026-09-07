@@ -23,14 +23,14 @@ def test_prevent_removal_of_accumulator():
     # The silence autofixture removed everything else; whatever is left is what logprise keeps alive.
     before = len(core.handlers)
     old_ids = _accumulator_handler_ids()
-    assert old_ids
+    assert len(old_ids) == 1  # exactly one accumulator, before ...
 
     logger.remove()  # Means: remove all
 
     assert len(core.handlers) == before
     new_ids = _accumulator_handler_ids()
-    assert new_ids
-    assert not set(old_ids) & set(new_ids), "the accumulator must have been re-added under new ids"
+    assert len(new_ids) == 1  # ... and exactly one after
+    assert old_ids != new_ids, "the accumulator must have been re-added under a new id"
 
 
 def test_prevent_removal_of_accumulator_not_removing_it():
@@ -39,7 +39,7 @@ def test_prevent_removal_of_accumulator_not_removing_it():
 
     before = len(core.handlers)
     accumulator_ids = _accumulator_handler_ids()
-    assert accumulator_ids
+    assert len(accumulator_ids) == 1
 
     mock_id = logger.add(sys.stderr)
     assert len(core.handlers) == before + 1
