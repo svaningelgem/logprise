@@ -1,18 +1,27 @@
-name: Build and Test
-permissions:
-  contents: read
+name: Python
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
-  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
+  python:
+    uses: svaningelgem/ci-workflows/.github/workflows/python.yml@v1
+    with:
+      pytest: false
 
+  # stubtest/mypy and the coverage-run tests stay local: the package is a pytest plugin, so
+  # coverage has to start before pytest imports it (`coverage run -m pytest`, not pytest-cov).
+  typecheck:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
@@ -23,12 +32,6 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --locked
-
-      - name: Run ruff format check
-        run: uv run ruff format --check --diff .
-
-      - name: Run ruff lint check
-        run: uv run ruff check --no-fix .
 
       - name: Run consistency checks between stub & module
         env:
@@ -43,7 +46,6 @@ jobs:
         run: uv run mypy .
 
   test:
-    needs: lint
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -62,9 +64,6 @@ jobs:
         run: uv sync --locked
 
       - name: Run tests with coverage
-        # Use `coverage run` (not pytest-cov) so measurement starts before pytest
-        # imports the logprise package and its pytest plugin, capturing their
-        # module-level definitions too.
         run: |
           uv run coverage run -m pytest
           uv run coverage xml
