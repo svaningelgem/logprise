@@ -11,15 +11,18 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write  # patch-coverage PR comment
 
 jobs:
+  # The shared workflow starts coverage before pytest imports its plugins, which this
+  # package is one of, so its module-level code is measured.
   python:
-    uses: svaningelgem/ci-workflows/.github/workflows/python.yml@v1
+    uses: svaningelgem/ci-workflows/.github/workflows/python.yml@feat/optional-pylint-ty
     with:
-      pytest: false
+      python-versions: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  # stubtest/mypy and the coverage-run tests stay local: the package is a pytest plugin, so
-  # coverage has to start before pytest imports it (`coverage run -m pytest`, not pytest-cov).
   typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -44,35 +47,3 @@ jobs:
         # pyproject excludes .pyi from discovery so this checks the implementation, not the stub
         # that would otherwise shadow it; stubtest above covers the stub.
         run: uv run mypy .
-
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-      fail-fast: false
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install uv and Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v10.1.0
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: uv sync --locked
-
-      - name: Run tests with coverage
-        run: |
-          uv run coverage run -m pytest
-          uv run coverage xml
-
-      - name: Upload coverage report
-        if: github.actor != 'dependabot[bot]'
-        uses: codecov/codecov-action@v7
-        with:
-          fail_ci_if_error: true
-          files: ./coverage.xml
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
