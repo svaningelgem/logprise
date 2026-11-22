@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import concurrent.futures.thread  # noqa: F401  # registers the pool's shutdown hook before ours, so ours runs first
 import functools
 import html
 import inspect
@@ -207,6 +208,12 @@ class Appriser:
         protect(self.accumulate_log)
 
     def _setup_at_exit_cleanup(self) -> None:
+        # apprise 2 sends through a thread pool, and the pool takes no work once its own shutdown hook
+        # has run, which is before any atexit callback: a flush from atexit fails, and apprise reports
+        # that only at WARNING. threading's shutdown hooks run last-registered first, so this flush
+        # comes before the pool's. The atexit cleanup still restores the hooks and flushes what a
+        # non-daemon thread logs after this point.
+        threading._register_atexit(self.send_notification)  # type: ignore[attr-defined]  # private; concurrent.futures uses it too
         atexit.register(self.cleanup)
 
     def _load_default_config_paths(self) -> None:
@@ -413,7 +420,7 @@ class Appriser:
             True if the server(s) were added successfully, False otherwise.
         """
 
-        return self.apprise_obj.add(servers=servers, asset=asset, tag=tag)
+        return self.apprise_obj.add(services=servers, asset=asset, tag=tag)
 
     def clear(self) -> None:
         """Discard any buffered logs that have not been sent yet."""
@@ -521,14 +528,19 @@ class Appriser:
         for server in self.apprise_obj:
             try:
                 delivered = (
-                    apprise.Apprise(servers=server).notify(
-                        title=title, notify_type=notify_type, body=body, body_format=resolved_format
+                    bool(
+                        apprise.Apprise(services=server).notify(
+                            title=title, notify_type=notify_type, body=body, body_format=resolved_format
+                        )
                     )
                     or delivered
                 )
             except BaseException as e:
                 logger.warning(f"Failed to send notification: {e}")
         if not delivered:
+            logger.warning(
+                f"No notification target took the {len(batch)} buffered log record(s); keeping them for the next flush"
+            )
             self.buffer[:0] = batch  # ahead of whatever accumulated meanwhile
 
 

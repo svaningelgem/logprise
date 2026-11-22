@@ -263,6 +263,21 @@ def test_send_notification_buffer_kept_when_notify_reports_failure(mocker, appri
     assert len(appriser.buffer) == 1  # not cleared, since the send did not succeed
 
 
+def test_a_batch_no_target_took_is_reported(mocker, apprise_noop):
+    """apprise reports its own failed sends at WARNING, below anything that is notified: say so ourselves."""
+    appriser, _ = apprise_noop
+    logger.error("Boom")
+    mocker.patch.object(Apprise, "notify", return_value=False)
+    seen: list[str] = []
+    sink = logger.add(lambda message: seen.append(message.record["message"]), level="WARNING")
+    try:
+        appriser.send_notification()
+    finally:
+        logger.remove(sink)
+
+    assert seen == ["No notification target took the 1 buffered log record(s); keeping them for the next flush"]
+
+
 def test_flagged_logger_gets_the_interceptor_but_keeps_its_console_handler():
     """The once-per-logger flag guards only the console-handler strip. A logger flagged as handled still
     gets an InterceptHandler re-attached on every call (logging.config may have removed it), while a

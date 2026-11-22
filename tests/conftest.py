@@ -62,13 +62,15 @@ _armed: list[Appriser] = []
 
 
 def dispose(appriser: Appriser) -> None:
-    """Disarm an instance ``make_appriser()`` built: stop its flush thread and drop its atexit hook.
+    """Disarm an instance ``make_appriser()`` built: stop its flush thread and drop its exit hooks.
 
-    ``install()`` starts a daemon flush thread and registers ``cleanup`` with ``atexit``.
-    Left alone, every instance a test built keeps flushing for the rest of the session and
-    fires its own delivery attempt at interpreter exit.
+    ``install()`` starts a daemon flush thread, registers ``send_notification`` with threading's
+    shutdown hooks and ``cleanup`` with ``atexit``. Left alone, every instance a test built keeps
+    flushing for the rest of the session and fires its own delivery attempts at interpreter exit.
     """
     appriser.stop_periodic_flush()
+    # threading cannot unregister a shutdown hook: with no targets left, that flush has nowhere to send
+    appriser.apprise_obj.clear()
     atexit.unregister(appriser.cleanup)
     unprotect(appriser.accumulate_log)  # its accumulator would otherwise outlive the test
 

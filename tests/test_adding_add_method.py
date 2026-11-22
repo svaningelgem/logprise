@@ -13,7 +13,7 @@ def test_add_method(mocker):
     assert appriser.add(test_url) is True
 
     # Verify add was called with correct parameters
-    mock_add.assert_called_once_with(servers=test_url, asset=None, tag=None)
+    mock_add.assert_called_once_with(services=test_url, asset=None, tag=None)
 
     # Reset mock for next test
     mock_add.reset_mock()
@@ -24,7 +24,7 @@ def test_add_method(mocker):
     assert appriser.add(test_dict, tag=test_tag) is True
 
     # Verify add was called with correct parameters
-    mock_add.assert_called_once_with(servers=test_dict, asset=None, tag=test_tag)
+    mock_add.assert_called_once_with(services=test_dict, asset=None, tag=test_tag)
 
     # Test return value pass-through (False case)
     mock_add.return_value = False

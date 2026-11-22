@@ -1,10 +1,9 @@
 """End-to-end check that the atexit flush still delivers to every target (#166).
 
-Spawns a real python subprocess so ``atexit`` fires during interpreter
-shutdown, with two targets: delivered through a single Apprise.notify() they
-would go through a thread pool, which cannot be created during shutdown.
-Per-target delivery never needs one. Each target appends a line to a
-sentinel file when it sends.
+Spawns a real python subprocess so the exit flush runs during interpreter
+shutdown, with two targets. apprise 2 sends every one through a thread pool,
+which takes no work once its own shutdown hook has run: the flush has to come
+before that. Each target appends a line to a sentinel file when it sends.
 """
 
 import subprocess
