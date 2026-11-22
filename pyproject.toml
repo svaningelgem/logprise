@@ -13,7 +13,7 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.10"
 loguru = "*"
-apprise = "*"
+apprise = "<2"  # 2.x sends through a thread pool that refuses work at exit, so the exit flush fails; master supports 2.x
 urllib3 = "<3"  # Because else poetry won't work anymore!
 
 [tool.poetry.group.dev.dependencies]
